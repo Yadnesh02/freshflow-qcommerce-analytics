@@ -25,6 +25,39 @@ popularity:
   distribution: zipf
   alpha: 1.08
 
+# Network scale anchor. The demand model calibrates itself so that an average
+# day across the whole network produces this many units; everything else is a
+# multiplier around it. Chosen to land ~5.5M order lines over 365 days, which
+# is large enough to be real work and small enough to stay on a laptop.
+demand:
+  network_daily_units_baseline: 15000
+  # Negative binomial, not Poisson. Real retail demand is over-dispersed, and a
+  # Poisson generator would make the forecast look artificially good.
+  # Var = lambda + lambda^2 / k, so lower k means lumpier demand.
+  dispersion_k: 6.0
+  dispersion_k_low_volume: 2.0
+  low_volume_threshold_units: 1.0
+  # a new store ramps to full demand over its first weeks rather than opening
+  # at steady state
+  new_store_ramp_days: 60
+  new_store_opening_factor: 0.40
+
+# GST slabs by category. Fresh produce and meat are exempt; packaged food,
+# personal care and household sit in higher slabs.
+gst_rate_by_category:
+  "Dairy & Eggs": 0.05
+  "Bakery": 0.05
+  "Fruits & Vegetables": 0.00
+  "Meat, Fish & Seafood": 0.00
+  "Snacks & Namkeen": 0.12
+  "Beverages": 0.18
+  "Staples & Packaged Food": 0.05
+  "Ready to Eat & Frozen": 0.12
+  "Personal Care": 0.18
+  "Household & Cleaning": 0.18
+  "Baby & Pet Care": 0.12
+  "Health & Wellness": 0.12
+
 private_label:
   brand_name: Nomi
   # private label carries roughly double the margin - the whole commercial
