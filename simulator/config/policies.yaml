@@ -1,0 +1,84 @@
+# =============================================================================
+# Decision policies
+# =============================================================================
+# `baseline` is the control arm of the Sprint 5 experiment. It has to be a fair
+# representation of how a dark-store network actually runs today, not a
+# strawman - a rigged control would make the headline result meaningless and is
+# the first thing a sharp interviewer would probe.
+#
+# So the baseline is competent where the industry is competent:
+#   - a proper (s, S) reorder point on a trailing 7-day average, which is
+#     genuinely what most replenishment systems do
+#   - a markdown ladder that does fire before expiry rather than after
+#   - a deal rail that runs every day without fail
+#
+# And naive exactly where the industry is naive:
+#   - one assumed lead time for every supplier, ignoring the variance
+#   - no anticipation of festivals, monsoon or the salary cycle
+#   - no cap on days of cover by shelf life, so short-life SKUs get
+#     over-ordered on the same rule as masala
+#   - a flat discount that ignores elasticity, demand and how much is left
+#   - one deal SKU for the whole city, unconnected to what is about to expire
+#
+# Every one of those five is a specific failure the optimised policy in Sprint 4
+# is built to fix, and each should show up separately in the ablation.
+# =============================================================================
+
+version: 1
+
+baseline:
+  name: baseline
+  description: Static reorder point, flat markdown ladder, one citywide deal SKU.
+
+  replenishment:
+    # how often the store can place an order
+    review_period_days: 1
+    # demand estimate: a flat trailing mean. Seven days averages the weekly
+    # cycle away rather than modelling it, which is the point.
+    trailing_window_days: 7
+    # one lead time for every supplier, when the real ones run 0.5 to 3.2 days
+    # with very different variance
+    assumed_lead_time_days: 2.0
+    # safety stock as a flat number of days, not derived from demand variance
+    safety_days: 1.5
+    min_order_qty: 6
+    order_multiple: 6
+    # no shelf-life cap: a 3-day milk gets the same cover rule as a 540-day
+    # masala. One of the largest sources of avoidable wastage.
+    max_days_of_cover: null
+    # a brand-new SKU with no sales history still needs a first order
+    cold_start_units: 12
+
+  markdown:
+    # applied to anything short-dated enough for a store to bother
+    applies_to_shelf_life_days_max: 30
+    # flat ladder on days to expiry, identical in every store for every product
+    ladder:
+      - { dte_max: 1, discount: 0.50 }
+      - { dte_max: 2, discount: 0.30 }
+    # no budget, no cost floor, no elasticity - whatever the ladder says
+    respects_cost_floor: false
+
+  deal_slot:
+    slots_per_store: 1
+    # the same SKU in all 14 stores, chosen centrally
+    citywide: true
+    rotate_every_days: 7
+    price_point: 11
+    # chosen from the deal-eligible list without looking at stock or expiry
+    considers_expiry: false
+
+  transfers:
+    # no inter-store movement at all. Stock stranded in the wrong store stays
+    # stranded, which is why P3 shows a simultaneous write-off and lost sale.
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# The treatment arm. Built in Sprint 4 (tasks S4.1-S4.6); parameters land here
+# as each component is written, so the two arms stay configured side by side and
+# the diff between them is legible.
+# -----------------------------------------------------------------------------
+optimized:
+  name: optimized
+  description: Forecast-driven ordering, risk-scored markdown, per-store deal slots, transfers.
+  implemented: false

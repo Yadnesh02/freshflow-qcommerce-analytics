@@ -187,6 +187,18 @@ class InventoryLedger:
         self.movements = []
         return out
 
+    def min_dte_matrix(self, date_ord: int, empty: int = 9999) -> np.ndarray:
+        """Days to expiry of the soonest-expiring batch in each cell.
+
+        What a flat markdown ladder actually keys on: the store marks the whole
+        facing down when anything behind it is close to going off.
+        """
+        out = np.full((self.n_stores, self.n_skus), empty, dtype=np.int64)
+        for (si, ki), q in self._queues.items():
+            if q:
+                out[si, ki] = q[0][0] - date_ord
+        return out
+
     def reconcile(self) -> np.ndarray:
         """On-hand rebuilt from the queues, for comparison against the counters."""
         rebuilt = np.zeros_like(self._on_hand)

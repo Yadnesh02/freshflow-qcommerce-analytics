@@ -26,7 +26,7 @@ from typing import Any
 import yaml
 
 CONFIG_DIR = Path(__file__).parent / "config"
-FILES = ("stores", "catalog", "calendar", "segments", "suppliers")
+FILES = ("stores", "catalog", "calendar", "segments", "suppliers", "policies")
 
 # how far a set of shares may sum from 1.0 before it is a bug rather than
 # floating-point noise
@@ -73,6 +73,7 @@ class SimConfig:
     calendar: dict[str, Any]
     segments: list[dict[str, Any]]
     suppliers: list[dict[str, Any]]
+    policies: dict[str, Any]
     raw: dict[str, dict[str, Any]]
 
     # ---------------------------------------------------------------- lookups
@@ -361,6 +362,38 @@ def _validate_suppliers(
 
 
 # ----------------------------------------------------------------------- entry
+def _validate_policies(doc: dict[str, Any]) -> None:
+    if "baseline" not in doc:
+        raise ConfigError("policies.yaml must define a 'baseline' policy")
+
+    rep = doc["baseline"]["replenishment"]
+    for key in ("review_period_days", "trailing_window_days", "assumed_lead_time_days"):
+        if rep[key] <= 0:
+            raise ConfigError(f"baseline replenishment '{key}' must be positive")
+    if rep["safety_days"] < 0:
+        raise ConfigError("baseline safety_days cannot be negative")
+    if rep["order_multiple"] < 1 or rep["min_order_qty"] < 1:
+        raise ConfigError("baseline order sizing must be at least one unit")
+
+    ladder = doc["baseline"]["markdown"]["ladder"]
+    if not ladder:
+        raise ConfigError("baseline markdown ladder is empty")
+    # deeper discounts must sit closer to expiry, or the ladder is upside down
+    steps = sorted(ladder, key=lambda r: r["dte_max"])
+    discounts = [r["discount"] for r in steps]
+    if discounts != sorted(discounts, reverse=True):
+        raise ConfigError(
+            "baseline markdown ladder is not monotonic - discount must deepen as "
+            "days to expiry fall"
+        )
+    for r in ladder:
+        if not 0 < r["discount"] < 1:
+            raise ConfigError(f"markdown discount {r['discount']} must be between 0 and 1")
+
+    if doc["baseline"]["deal_slot"]["slots_per_store"] < 1:
+        raise ConfigError("baseline must run at least one deal slot")
+
+
 def load_sim_config(config_dir: Path = CONFIG_DIR) -> SimConfig:
     """Load all five config files and validate them against each other."""
     global CONFIG_DIR  # noqa: PLW0603 - lets tests point at a fixture directory
@@ -383,12 +416,15 @@ def load_sim_config(config_dir: Path = CONFIG_DIR) -> SimConfig:
     _validate_segments(raw["segments"], names)
     _validate_suppliers(raw["suppliers"], names, categories)
 
+    _validate_policies(raw["policies"])
+
     return SimConfig(
         stores=raw["stores"]["stores"],
         categories=categories,
         calendar=calendar,
         segments=raw["segments"]["segments"],
         suppliers=raw["suppliers"]["suppliers"],
+        policies=raw["policies"],
         raw=raw,
     )
 

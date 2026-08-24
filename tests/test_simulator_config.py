@@ -267,7 +267,7 @@ def test_private_label_is_cheaper_to_source() -> None:
 # ------------------------------------------------------------------ negative
 def _write_broken(tmp_path, filename: str, mutate) -> None:
     """Copy the real configs to tmp_path, then corrupt one of them."""
-    for name in ("stores", "catalog", "calendar", "segments", "suppliers"):
+    for name in ("stores", "catalog", "calendar", "segments", "suppliers", "policies"):
         doc = yaml.safe_load((CONFIG_DIR / f"{name}.yaml").read_text(encoding="utf-8"))
         if name == filename:
             mutate(doc)
