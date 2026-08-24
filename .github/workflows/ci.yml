@@ -46,28 +46,18 @@ jobs:
       - name: Metric dictionary is current
         run: uv run python -m semantic.generate_docs --check
 
-      # dbt runs on a small generated slice so CI stays under a minute.
-      # Skipped until the simulator and models land (S1.7 / S2.1).
-      - name: Check for dbt models
-        id: dbt_check
-        run: |
-          if [ -n "$(find transform/models -name '*.sql' 2>/dev/null)" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No dbt models yet - skipping dbt build (task S2.1)"
-          fi
+      - name: Lint SQL (sqlfluff)
+        working-directory: transform
+        run: uv run sqlfluff lint models macros
 
+      - name: Create local directories
+        run: uv run python tasks.py setup
+
+      # dbt runs against a 30-day generated slice, not the full 365-day
+      # warehouse, so CI stays fast. Once the simulator lands (S1.7) this step
+      # produces real data; until then it is a documented no-op.
       - name: Generate CI dataset
-        if: steps.dbt_check.outputs.present == 'true'
         run: uv run python tasks.py simulate --days 30 --seed 1
 
       - name: dbt build
-        if: steps.dbt_check.outputs.present == 'true'
-        working-directory: transform
-        run: uv run dbt build --target ci
-
-      - name: Lint SQL (sqlfluff)
-        if: steps.dbt_check.outputs.present == 'true'
-        working-directory: transform
-        run: uv run sqlfluff lint models
+        run: uv run python tasks.py build --target ci

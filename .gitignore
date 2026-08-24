@@ -34,8 +34,8 @@ tmp*/
 # ---- secrets / local config ----
 .env
 .env.*
-profiles.yml
-!transform/profiles.example.yml
+# transform/profiles.yml is committed on purpose: DuckDB is a local file and
+# the profile holds no credentials. Real secrets go in env vars, never a file.
 
 # ---- editors / os ----
 .vscode/

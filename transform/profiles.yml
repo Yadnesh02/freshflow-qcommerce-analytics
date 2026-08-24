@@ -1,0 +1,27 @@
+# Committed deliberately: DuckDB is a local file, so there are no credentials
+# here. Anyone who clones the repo can run `dbt build` with no setup at all.
+# The moment a real secret is needed it moves to an env var, never to this file.
+
+freshflow:
+  target: dev
+  outputs:
+    # full 14-store, 365-day warehouse - what the experiment runs on
+    dev:
+      type: duckdb
+      path: "../data/warehouse/freshflow.duckdb"
+      schema: main
+      threads: 4
+
+    # 30-day slice generated fresh on every CI run, so builds stay under a minute
+    ci:
+      type: duckdb
+      path: "../data/warehouse/freshflow_ci.duckdb"
+      schema: main
+      threads: 2
+
+    # the <80MB marts-only slice that Streamlit Cloud actually deploys (S2.8)
+    demo:
+      type: duckdb
+      path: "../serving/demo/freshflow_demo.duckdb"
+      schema: main
+      threads: 2

@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: dim_dte_band
+    description: >
+      Days-to-expiry buckets used to condition price elasticity and to group the
+      expiry action queue. Bounds are lower-inclusive, upper-exclusive.
+    columns:
+      - name: dte_band
+        description: "Bucket label, matching the values declared in semantic/dimensions.yml."
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["0-1d", "1-2d", "2-3d", "3-5d", "5-7d", "7d+"]
+      - name: min_days
+        description: "Lower bound, inclusive."
+        data_tests:
+          - not_null
+      - name: max_days
+        description: "Upper bound, exclusive."
+        data_tests:
+          - not_null
+      - name: sort_order
+        description: "Display order, ascending by remaining shelf life."
+        data_tests:
+          - unique
+          - not_null
+
+seeds:
+  - name: dte_bands
+    description: "Source lookup for dim_dte_band."
+    columns:
+      - name: band
+        data_tests:
+          - unique
+          - not_null

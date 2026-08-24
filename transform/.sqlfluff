@@ -1,0 +1,30 @@
+[sqlfluff]
+dialect = duckdb
+templater = jinja
+max_line_length = 100
+# LT05 is handled by max_line_length above; ST06 dictates column ordering in
+# select lists, which fights readable grouping of related columns
+exclude_rules = ST06
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = true
+
+[sqlfluff:indentation]
+tab_space_size = 4
+indented_joins = false
+implicit_indents = allow
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = lower

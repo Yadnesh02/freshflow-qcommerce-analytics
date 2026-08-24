@@ -1,0 +1,46 @@
+name: "freshflow"
+version: "0.1.0"
+config-version: 2
+
+profile: "freshflow"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+require-dbt-version: [">=1.8.0", "<2.0.0"]
+
+models:
+  freshflow:
+    +persist_docs:
+      relation: true
+      columns: true
+
+    # views: cheap to rebuild, always current, never stored twice
+    staging:
+      +materialized: view
+      +schema: staging
+
+    # ephemeral: inlined as CTEs, so intermediate logic stays readable
+    # without littering the warehouse with tables nobody queries
+    intermediate:
+      +materialized: ephemeral
+      +schema: intermediate
+
+    # tables: the marts are read repeatedly by the API and dashboard,
+    # so pay the storage and get the scan speed
+    marts:
+      +materialized: table
+      +schema: marts
+
+seeds:
+  freshflow:
+    +schema: seeds
+
+snapshots:
+  freshflow:
+    +schema: snapshots

@@ -96,14 +96,30 @@ def t_simulate(args: argparse.Namespace) -> int:
     return py("-m", "simulator.run", "--days", str(args.days), "--seed", str(args.seed))
 
 
+def dbt(*args: str, check: bool = True) -> int:
+    """Invoke dbt as a module so it resolves from the active venv, not PATH."""
+    return run(
+        [sys.executable, "-m", "dbt.cli.main", *args, "--profiles-dir", "."],
+        cwd=TRANSFORM,
+        check=check,
+    )
+
+
+def _ensure_dbt_deps() -> None:
+    """Install dbt packages once, if packages.yml declares any."""
+    if (TRANSFORM / "packages.yml").exists() and not (TRANSFORM / "dbt_packages").exists():
+        dbt("deps")
+
+
 def t_build(args: argparse.Namespace) -> int:
-    """Run dbt: staging -> marts, with tests."""
-    cmd = ["dbt", "build"]
+    """Run dbt: seeds -> models -> tests."""
+    _ensure_dbt_deps()
+    extra: list[str] = ["--target", args.dbt_target]
     if args.select:
-        cmd += ["--select", args.select]
+        extra += ["--select", args.select]
     if args.full_refresh:
-        cmd += ["--full-refresh"]
-    return run(cmd, cwd=TRANSFORM)
+        extra += ["--full-refresh"]
+    return dbt("build", *extra)
 
 
 def t_test(_: argparse.Namespace) -> int:
@@ -199,12 +215,12 @@ def t_dagster(_: argparse.Namespace) -> int:
 
 def t_docs(_: argparse.Namespace) -> int:
     """Generate dbt docs and the metric dictionary."""
-    code = run(["dbt", "docs", "generate"], cwd=TRANSFORM, check=False)
+    code = dbt("docs", "generate", check=False)
     gen = ROOT / "semantic" / "generate_docs.py"
     if gen.exists():
         code |= py("-m", "semantic.generate_docs")
     else:
-        print("  (semantic/generate_docs.py not written yet - task S0.3)")
+        print("  (semantic/generate_docs.py missing)")
     return 1 if code else 0
 
 
@@ -220,9 +236,9 @@ def t_clean(_: argparse.Namespace) -> int:
         if p.exists():
             shutil.rmtree(p, ignore_errors=True)
             print(f"  removed {p.relative_to(ROOT)}")
-    if WAREHOUSE.exists():
-        WAREHOUSE.unlink()
-        print(f"  removed {WAREHOUSE.relative_to(ROOT)}")
+    for db in WAREHOUSE.parent.glob("*.duckdb*"):
+        db.unlink()
+        print(f"  removed {db.relative_to(ROOT)}")
     return 0
 
 
@@ -268,6 +284,10 @@ def main() -> int:
         if name in ("build", "all"):
             p.add_argument("--select", default=None, help="dbt node selector")
             p.add_argument("--full-refresh", action="store_true")
+            # dest is renamed because the subparser already owns args.target
+            p.add_argument(
+                "--target", dest="dbt_target", default="dev", choices=["dev", "ci", "demo"]
+            )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
         if name in ("api", "app"):
@@ -278,6 +298,7 @@ def main() -> int:
     for attr, default in (
         ("select", None),
         ("full_refresh", False),
+        ("dbt_target", "dev"),
         ("days", 365),
         ("seed", 42),
         ("fix", False),
