@@ -1,0 +1,223 @@
+# =============================================================================
+# Product catalogue - templates, not 1,500 hand-written rows
+# =============================================================================
+# The generator expands these subcategory templates into individual SKUs
+# deterministically from a seed. Hand-listing 1,500 SKUs would be unmaintainable
+# and no more realistic.
+#
+# What matters analytically:
+#   shelf_life_days  - drives the whole expiry problem. Milk at 2-4 days and
+#                      masala at 540 are genuinely different businesses.
+#   elasticity       - the ground truth the markdown optimiser must *infer*.
+#                      Never read directly by anything under analytics/.
+#   demand_weight    - category share of network demand, must sum to 1.0
+#   hour_curve       - which intraday peak this subcategory rides
+#
+# Prices are INR. gross_margin_pct is the retailer's margin on base price.
+# =============================================================================
+
+version: 1
+
+# SKU popularity within a subcategory follows a Zipf law: a handful of SKUs
+# carry most of the volume and a long tail barely moves. This is what makes
+# ABC/XYZ classification meaningful and what makes forecasting the tail hard.
+popularity:
+  distribution: zipf
+  alpha: 1.08
+
+private_label:
+  brand_name: Nomi
+  # private label carries roughly double the margin - the whole commercial
+  # reason problem P5 exists
+  margin_uplift_pct: 0.11
+  price_discount_vs_brand: 0.12
+
+categories:
+  # ---------------------------------------------------------------------------
+  - l1: Dairy & Eggs
+    temp_zone: chilled
+    demand_weight: 0.155
+    elasticity: -0.75
+    private_label_share: 0.14
+    subcategories:
+      - { name: Milk, sku_count: 16, shelf_life_days: [2, 4], price: [26, 88], margin: [0.05, 0.10], hour_curve: morning }
+      - { name: Curd & Yogurt, sku_count: 22, shelf_life_days: [5, 9], price: [20, 130], margin: [0.12, 0.22], hour_curve: morning }
+      - { name: Paneer & Tofu, sku_count: 12, shelf_life_days: [4, 10], price: [70, 320], margin: [0.14, 0.24], hour_curve: morning }
+      - { name: Butter & Ghee, sku_count: 18, shelf_life_days: [120, 300], price: [55, 780], margin: [0.10, 0.18], hour_curve: flat }
+      - { name: Cheese, sku_count: 20, shelf_life_days: [60, 180], price: [90, 620], margin: [0.16, 0.28], hour_curve: flat }
+      - { name: Eggs, sku_count: 10, shelf_life_days: [14, 24], price: [42, 210], margin: [0.08, 0.15], hour_curve: morning }
+      - { name: Cream & Desserts, sku_count: 12, shelf_life_days: [7, 30], price: [45, 260], margin: [0.15, 0.26], hour_curve: evening }
+
+  # ---------------------------------------------------------------------------
+  - l1: Bakery
+    temp_zone: ambient
+    demand_weight: 0.058
+    elasticity: -0.95
+    private_label_share: 0.12
+    subcategories:
+      - { name: Bread & Pav, sku_count: 22, shelf_life_days: [2, 4], price: [22, 95], margin: [0.10, 0.20], hour_curve: morning }
+      - { name: Buns & Rolls, sku_count: 14, shelf_life_days: [2, 5], price: [25, 110], margin: [0.12, 0.22], hour_curve: morning }
+      - { name: Cakes & Pastries, sku_count: 18, shelf_life_days: [3, 8], price: [60, 650], margin: [0.20, 0.35], hour_curve: evening }
+      - { name: Rusk & Khari, sku_count: 13, shelf_life_days: [45, 120], price: [30, 160], margin: [0.14, 0.24], hour_curve: morning }
+      - { name: Fresh Cookies, sku_count: 18, shelf_life_days: [10, 40], price: [45, 340], margin: [0.18, 0.30], hour_curve: evening }
+
+  # ---------------------------------------------------------------------------
+  - l1: Fruits & Vegetables
+    temp_zone: chilled
+    demand_weight: 0.118
+    elasticity: -0.85
+    private_label_share: 0.05
+    subcategories:
+      - { name: Fresh Fruit, sku_count: 55, shelf_life_days: [3, 9], price: [30, 480], margin: [0.18, 0.34], hour_curve: morning }
+      - { name: Fresh Vegetables, sku_count: 70, shelf_life_days: [2, 8], price: [15, 220], margin: [0.20, 0.38], hour_curve: morning }
+      - { name: Herbs & Seasonings, sku_count: 20, shelf_life_days: [2, 6], price: [10, 90], margin: [0.25, 0.42], hour_curve: morning }
+      - { name: Cut & Sprouts, sku_count: 20, shelf_life_days: [1, 3], price: [35, 180], margin: [0.22, 0.38], hour_curve: morning }
+
+  # ---------------------------------------------------------------------------
+  - l1: Meat, Fish & Seafood
+    temp_zone: chilled
+    demand_weight: 0.038
+    elasticity: -1.10
+    private_label_share: 0.05
+    subcategories:
+      - { name: Chicken, sku_count: 20, shelf_life_days: [2, 4], price: [120, 640], margin: [0.14, 0.26], hour_curve: evening }
+      - { name: Fish & Seafood, sku_count: 20, shelf_life_days: [1, 3], price: [150, 980], margin: [0.16, 0.30], hour_curve: evening }
+      - { name: Mutton, sku_count: 8, shelf_life_days: [2, 4], price: [340, 1200], margin: [0.12, 0.22], hour_curve: evening }
+      - { name: Marinated & Ready, sku_count: 7, shelf_life_days: [2, 5], price: [160, 560], margin: [0.20, 0.32], hour_curve: evening }
+
+  # ---------------------------------------------------------------------------
+  - l1: Snacks & Namkeen
+    temp_zone: ambient
+    demand_weight: 0.155
+    elasticity: -1.40
+    private_label_share: 0.09
+    subcategories:
+      - { name: Chips & Crisps, sku_count: 45, shelf_life_days: [90, 180], price: [10, 120], margin: [0.16, 0.28], hour_curve: evening }
+      - { name: Namkeen & Mixtures, sku_count: 40, shelf_life_days: [90, 210], price: [20, 240], margin: [0.18, 0.30], hour_curve: evening }
+      - { name: Biscuits, sku_count: 50, shelf_life_days: [120, 300], price: [10, 180], margin: [0.14, 0.26], hour_curve: flat }
+      - { name: Chocolates, sku_count: 40, shelf_life_days: [150, 365], price: [20, 550], margin: [0.15, 0.28], hour_curve: evening }
+
+  # ---------------------------------------------------------------------------
+  - l1: Beverages
+    temp_zone: ambient
+    demand_weight: 0.112
+    elasticity: -1.35
+    private_label_share: 0.07
+    subcategories:
+      - { name: Soft Drinks, sku_count: 35, shelf_life_days: [120, 270], price: [20, 140], margin: [0.10, 0.20], hour_curve: evening }
+      - { name: Juices, sku_count: 30, shelf_life_days: [30, 180], price: [25, 260], margin: [0.14, 0.26], hour_curve: morning }
+      - { name: Energy & Sports, sku_count: 20, shelf_life_days: [120, 300], price: [35, 180], margin: [0.16, 0.28], hour_curve: evening }
+      - { name: Tea & Coffee, sku_count: 45, shelf_life_days: [180, 540], price: [40, 890], margin: [0.15, 0.30], hour_curve: morning }
+      - { name: Water, sku_count: 20, shelf_life_days: [180, 365], price: [10, 95], margin: [0.08, 0.16], hour_curve: flat }
+
+  # ---------------------------------------------------------------------------
+  - l1: Staples & Packaged Food
+    temp_zone: ambient
+    demand_weight: 0.132
+    elasticity: -0.55
+    private_label_share: 0.13
+    subcategories:
+      - { name: Atta & Flours, sku_count: 25, shelf_life_days: [90, 240], price: [45, 620], margin: [0.06, 0.14], hour_curve: flat }
+      - { name: Rice & Grains, sku_count: 35, shelf_life_days: [180, 540], price: [55, 1450], margin: [0.07, 0.16], hour_curve: flat }
+      - { name: Dals & Pulses, sku_count: 30, shelf_life_days: [180, 365], price: [60, 420], margin: [0.08, 0.16], hour_curve: flat }
+      - { name: Edible Oils, sku_count: 25, shelf_life_days: [180, 365], price: [110, 1300], margin: [0.04, 0.10], hour_curve: flat }
+      - { name: Masalas & Spices, sku_count: 55, shelf_life_days: [270, 540], price: [25, 480], margin: [0.18, 0.34], hour_curve: flat }
+      - { name: Sugar & Salt, sku_count: 15, shelf_life_days: [365, 720], price: [20, 180], margin: [0.05, 0.12], hour_curve: flat }
+      - { name: Sauces & Spreads, sku_count: 35, shelf_life_days: [120, 365], price: [40, 520], margin: [0.16, 0.30], hour_curve: flat }
+
+  # ---------------------------------------------------------------------------
+  - l1: Ready to Eat & Frozen
+    temp_zone: frozen
+    demand_weight: 0.062
+    elasticity: -1.25
+    private_label_share: 0.10
+    subcategories:
+      - { name: Frozen Snacks, sku_count: 30, shelf_life_days: [90, 365], price: [80, 420], margin: [0.18, 0.32], hour_curve: evening }
+      - { name: Frozen Paratha & Roti, sku_count: 18, shelf_life_days: [90, 300], price: [60, 320], margin: [0.16, 0.28], hour_curve: morning }
+      - { name: Ice Cream, sku_count: 35, shelf_life_days: [120, 365], price: [30, 680], margin: [0.20, 0.36], hour_curve: evening }
+      - { name: Ready Meals, sku_count: 22, shelf_life_days: [7, 180], price: [90, 460], margin: [0.18, 0.30], hour_curve: evening }
+
+  # ---------------------------------------------------------------------------
+  - l1: Personal Care
+    temp_zone: ambient
+    demand_weight: 0.072
+    elasticity: -1.05
+    private_label_share: 0.06
+    subcategories:
+      - { name: Hair Care, sku_count: 35, shelf_life_days: [365, 900], price: [50, 890], margin: [0.20, 0.36], hour_curve: flat }
+      - { name: Skin Care, sku_count: 35, shelf_life_days: [365, 900], price: [60, 1400], margin: [0.22, 0.40], hour_curve: flat }
+      - { name: Oral Care, sku_count: 25, shelf_life_days: [540, 1080], price: [30, 420], margin: [0.18, 0.32], hour_curve: flat }
+      - { name: Bath & Body, sku_count: 40, shelf_life_days: [540, 1080], price: [35, 680], margin: [0.20, 0.34], hour_curve: flat }
+      - { name: Feminine Hygiene, sku_count: 15, shelf_life_days: [720, 1080], price: [45, 480], margin: [0.16, 0.30], hour_curve: flat }
+      - { name: Grooming, sku_count: 15, shelf_life_days: [720, 1080], price: [60, 1200], margin: [0.18, 0.32], hour_curve: flat }
+
+  # ---------------------------------------------------------------------------
+  - l1: Household & Cleaning
+    temp_zone: ambient
+    demand_weight: 0.058
+    elasticity: -0.90
+    private_label_share: 0.09
+    subcategories:
+      - { name: Detergents, sku_count: 30, shelf_life_days: [540, 1080], price: [40, 780], margin: [0.14, 0.26], hour_curve: flat }
+      - { name: Surface Cleaners, sku_count: 30, shelf_life_days: [540, 1080], price: [45, 460], margin: [0.18, 0.32], hour_curve: flat }
+      - { name: Dishwash, sku_count: 20, shelf_life_days: [540, 1080], price: [30, 340], margin: [0.16, 0.30], hour_curve: flat }
+      - { name: Paper & Disposables, sku_count: 25, shelf_life_days: [720, 1440], price: [35, 420], margin: [0.20, 0.34], hour_curve: flat }
+      - { name: Pest & Air Care, sku_count: 20, shelf_life_days: [540, 1080], price: [55, 520], margin: [0.20, 0.34], hour_curve: flat }
+      - { name: Pooja Needs, sku_count: 20, shelf_life_days: [180, 720], price: [20, 380], margin: [0.22, 0.40], hour_curve: morning }
+
+  # ---------------------------------------------------------------------------
+  - l1: Baby & Pet Care
+    temp_zone: ambient
+    demand_weight: 0.024
+    elasticity: -0.70
+    private_label_share: 0.05
+    subcategories:
+      - { name: Baby Food, sku_count: 18, shelf_life_days: [180, 540], price: [180, 1100], margin: [0.10, 0.20], hour_curve: flat }
+      - { name: Diapers & Wipes, sku_count: 22, shelf_life_days: [720, 1080], price: [90, 1600], margin: [0.12, 0.24], hour_curve: flat }
+      - { name: Baby Care, sku_count: 15, shelf_life_days: [540, 1080], price: [80, 780], margin: [0.18, 0.32], hour_curve: flat }
+      - { name: Pet Food & Care, sku_count: 20, shelf_life_days: [180, 540], price: [110, 2400], margin: [0.14, 0.26], hour_curve: flat }
+
+  # ---------------------------------------------------------------------------
+  - l1: Health & Wellness
+    temp_zone: ambient
+    demand_weight: 0.016
+    elasticity: -0.80
+    private_label_share: 0.04
+    subcategories:
+      - { name: OTC & First Aid, sku_count: 25, shelf_life_days: [365, 900], price: [25, 560], margin: [0.16, 0.30], hour_curve: flat }
+      - { name: Supplements, sku_count: 25, shelf_life_days: [365, 720], price: [150, 2200], margin: [0.22, 0.40], hour_curve: flat }
+
+# -----------------------------------------------------------------------------
+# Substitution: when a SKU is out of stock, where does its demand go?
+# Some shifts within the subcategory, some to private label (which is why
+# stockouts are a natural experiment for measuring PL substitution in P5), and
+# the rest is genuinely lost. The lost share is what makes availability a
+# revenue problem and not just a service metric.
+# -----------------------------------------------------------------------------
+substitution:
+  within_subcategory: 0.45
+  to_private_label: 0.15
+  lost: 0.40
+  # staples substitute readily; fresh and branded snacks much less so
+  overrides:
+    Staples & Packaged Food: { within_subcategory: 0.62, to_private_label: 0.20, lost: 0.18 }
+    Fruits & Vegetables: { within_subcategory: 0.55, to_private_label: 0.05, lost: 0.40 }
+    Snacks & Namkeen: { within_subcategory: 0.38, to_private_label: 0.10, lost: 0.52 }
+    Dairy & Eggs: { within_subcategory: 0.50, to_private_label: 0.18, lost: 0.32 }
+
+# -----------------------------------------------------------------------------
+# Freshness aversion: P(buy) as remaining shelf life runs out, even at a
+# discount. This is why a flat "30% off at D-2" ladder fails - the discount that
+# clears a 5-day-old yoghurt will not clear a 1-day-old one.
+# Keyed by fraction of shelf life remaining.
+# -----------------------------------------------------------------------------
+freshness_acceptance:
+  perishable_threshold_days: 14
+  curve:
+    1.00: 1.00
+    0.60: 0.98
+    0.40: 0.93
+    0.25: 0.82
+    0.15: 0.64
+    0.08: 0.41
+    0.00: 0.18

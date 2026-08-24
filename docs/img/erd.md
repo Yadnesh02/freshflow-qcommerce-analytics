@@ -452,7 +452,7 @@ erDiagram
 | Table | Layer | Grain | Why it exists |
 |---|---|---|---|
 | `dim_store` | gold | store | 14 Mumbai dark stores |
-| `dim_product` | gold | SKU | 1,500 SKUs, ~380 perishable, ~130 private label |
+| `dim_product` | gold | SKU | 1,500 SKUs, ~325 perishable, ~131 private label |
 | `dim_product_snapshot` | gold | SKU × valid_from | SCD2 on cost and price, so historical margin is correct |
 | `dim_customer` | gold | customer | ~45,000 customers |
 | `dim_date` | gold | date | Festival, monsoon and salary-week flags |

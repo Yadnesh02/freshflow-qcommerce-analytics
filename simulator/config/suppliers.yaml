@@ -1,0 +1,188 @@
+# =============================================================================
+# Suppliers
+# =============================================================================
+# Two supply-side facts drive most of the wastage that stores get blamed for:
+#
+#   1. Lead time VARIANCE, not lead time. A reliable 3-day supplier is easier to
+#      plan for than an erratic 1-to-4-day one, because safety stock has to
+#      cover the spread.
+#
+# `category_share` is this supplier's share of BRANDED volume in each category.
+# Shares must sum to 1.0 per category across non-private-label suppliers.
+#
+#   2. INBOUND FRESHNESS. A dairy batch that arrives with 55% of its shelf life
+#      already gone has half the selling window the planner assumed. This is a
+#      real q-commerce pain point and it is invisible unless you model batches.
+#
+# SUP-DAIRY-B below is deliberately the weak link: acceptable OTIF, unremarkable
+# lead time, but consistently poor inbound freshness. The finding it plants is
+# "supplier B ships dairy with 3.1 fewer shelf-days than supplier A and drives a
+# disproportionate share of dairy wastage despite a minority of volume" - an
+# upstream root cause that no amount of store-level markdown optimisation fixes.
+# =============================================================================
+
+version: 1
+
+defaults:
+  min_order_qty: 12
+  order_multiple: 6
+  delivery_days: [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
+
+suppliers:
+  # ------------------------------------------------------------------ dairy
+  - supplier_id: SUP-DAIRY-A
+    supplier_name: Konkan Dairy Cooperative
+    category_share: { "Dairy & Eggs": 0.62 }
+    lead_time_mean_days: 1.0
+    lead_time_sd_days: 0.25
+    otif_rate: 0.965
+    inbound_freshness_pct: [0.88, 0.06] # mean, sd - share of shelf life remaining
+    cost_index: 1.00
+
+  - supplier_id: SUP-DAIRY-B
+    supplier_name: Sahyadri Milk Distributors
+    category_share: { "Dairy & Eggs": 0.38 }
+    lead_time_mean_days: 1.4
+    lead_time_sd_days: 0.65
+    otif_rate: 0.918
+    inbound_freshness_pct: [0.61, 0.14] # <- the planted root cause
+    cost_index: 0.94 # cheaper per unit, which is why procurement keeps them
+
+  # ------------------------------------------------------------------ fresh
+  - supplier_id: SUP-FRESH-A
+    supplier_name: Vashi APMC Fresh
+    category_share: { "Fruits & Vegetables": 0.70 }
+    lead_time_mean_days: 0.6
+    lead_time_sd_days: 0.30
+    otif_rate: 0.905
+    inbound_freshness_pct: [0.79, 0.11]
+    cost_index: 1.00
+    monsoon_otif_penalty: 0.14 # supply disruption Jun-Sep
+
+  - supplier_id: SUP-FRESH-B
+    supplier_name: Nashik Farm Direct
+    category_share: { "Fruits & Vegetables": 0.30 }
+    lead_time_mean_days: 1.5
+    lead_time_sd_days: 0.55
+    otif_rate: 0.938
+    inbound_freshness_pct: [0.90, 0.07]
+    cost_index: 1.09
+    monsoon_otif_penalty: 0.09
+
+  # ------------------------------------------------------------------ protein
+  - supplier_id: SUP-MEAT-A
+    supplier_name: Deonar Protein Supply
+    category_share: { "Meat, Fish & Seafood": 1.00 }
+    lead_time_mean_days: 0.8
+    lead_time_sd_days: 0.35
+    otif_rate: 0.892
+    inbound_freshness_pct: [0.72, 0.13]
+    cost_index: 1.00
+
+  # ------------------------------------------------------------------ bakery
+  - supplier_id: SUP-BAKE-A
+    supplier_name: Mahim Bakehouse
+    category_share: { "Bakery": 1.00 }
+    lead_time_mean_days: 0.5
+    lead_time_sd_days: 0.20
+    otif_rate: 0.958
+    inbound_freshness_pct: [0.93, 0.05]
+    cost_index: 1.00
+
+  # ------------------------------------------------------------------ ambient
+  - supplier_id: SUP-FMCG-A
+    supplier_name: Bhiwandi FMCG Depot
+    category_share:
+      "Snacks & Namkeen": 0.58
+      "Beverages": 0.62
+      "Staples & Packaged Food": 0.55
+      "Personal Care": 1.00
+      "Household & Cleaning": 1.00
+    lead_time_mean_days: 2.5
+    lead_time_sd_days: 0.80
+    otif_rate: 0.948
+    inbound_freshness_pct: [0.86, 0.09]
+    cost_index: 1.00
+
+  - supplier_id: SUP-FMCG-B
+    supplier_name: Panvel Distribution Hub
+    category_share:
+      "Snacks & Namkeen": 0.42
+      "Beverages": 0.38
+      "Staples & Packaged Food": 0.45
+      "Baby & Pet Care": 1.00
+    lead_time_mean_days: 3.2
+    lead_time_sd_days: 1.40 # the erratic one - forces higher safety stock
+    otif_rate: 0.901
+    inbound_freshness_pct: [0.83, 0.10]
+    cost_index: 0.96
+
+  # ------------------------------------------------------------------ frozen
+  - supplier_id: SUP-FROZ-A
+    supplier_name: Coldstar Frozen Logistics
+    category_share: { "Ready to Eat & Frozen": 1.00 }
+    lead_time_mean_days: 2.0
+    lead_time_sd_days: 0.55
+    otif_rate: 0.942
+    inbound_freshness_pct: [0.91, 0.06]
+    cost_index: 1.00
+
+  # ------------------------------------------------------------------ pharma
+  - supplier_id: SUP-HLTH-A
+    supplier_name: Wadala Wellness Distributors
+    category_share: { "Health & Wellness": 1.00 }
+    lead_time_mean_days: 2.8
+    lead_time_sd_days: 0.70
+    otif_rate: 0.955
+    inbound_freshness_pct: [0.88, 0.07]
+    cost_index: 1.00
+
+  # ------------------------------------------------------------------ private label
+  - supplier_id: SUP-NOMI-A
+    supplier_name: Nomi Private Label Manufacturing
+    private_label_only: true
+    # private label supply is excluded from branded volume shares; Nomi SKUs are
+    # sourced here regardless of category
+    category_share:
+      "Dairy & Eggs": 1.00
+      "Bakery": 1.00
+      "Snacks & Namkeen": 1.00
+      "Beverages": 1.00
+      "Staples & Packaged Food": 1.00
+      "Household & Cleaning": 1.00
+      "Personal Care": 1.00
+      "Ready to Eat & Frozen": 1.00
+      "Fruits & Vegetables": 1.00
+      "Meat, Fish & Seafood": 1.00
+      "Baby & Pet Care": 1.00
+      "Health & Wellness": 1.00
+    lead_time_mean_days: 2.2
+    lead_time_sd_days: 0.60
+    otif_rate: 0.936
+    inbound_freshness_pct: [0.85, 0.08]
+    cost_index: 0.78 # the margin advantage behind problem P5
+
+# -----------------------------------------------------------------------------
+# Supply shocks - rare, disruptive, and the reason safety stock exists
+# -----------------------------------------------------------------------------
+shocks:
+  - name: monsoon_produce_disruption
+    months: [7, 8]
+    probability_per_day: 0.06
+    duration_days: [1, 3]
+    affects_categories: ["Fruits & Vegetables"]
+    supply_factor: 0.45
+
+  - name: transport_strike
+    probability_per_day: 0.002
+    duration_days: [1, 2]
+    affects_categories: all
+    supply_factor: 0.30
+
+  - name: dairy_cold_chain_failure
+    probability_per_day: 0.004
+    duration_days: [1, 1]
+    affects_categories: ["Dairy & Eggs"]
+    supply_factor: 0.55
+    # arrives as stock, but with badly degraded shelf life
+    inbound_freshness_override: 0.35

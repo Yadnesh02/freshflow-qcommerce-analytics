@@ -1,0 +1,200 @@
+# =============================================================================
+# Simulation calendar - the demand-shaping events
+# =============================================================================
+# The India-specific factors here are what stop the generated data looking like
+# generic western retail. Salary week, monsoon and the festival cycle are all
+# large, real effects in Indian q-commerce, and each one creates a different
+# analytical problem: monsoon raises orders while cutting fresh supply, festivals
+# spike specific categories, and month-end demand collapse is what makes a naive
+# day-of-week forecast under-perform.
+#
+# FESTIVAL DATES ARE APPROXIMATE. Most Hindu festivals follow a lunar calendar
+# and shift year to year. They are close enough to shape a simulation, but do
+# not quote them as authoritative dates anywhere in the write-up.
+# =============================================================================
+
+version: 1
+
+window:
+  start_date: 2025-09-01
+  end_date: 2026-08-31
+  timezone: Asia/Kolkata
+
+# ---------------------------------------------------------------- weekly
+day_of_week_factor:
+  Monday: 0.92
+  Tuesday: 0.90
+  Wednesday: 0.94
+  Thursday: 0.98
+  Friday: 1.12
+  Saturday: 1.34
+  Sunday: 1.28
+
+# ---------------------------------------------------------------- monthly cash cycle
+# Salaries land at the start of the month; the last week is visibly thinner.
+# This is one of the strongest and most under-modelled signals in Indian retail.
+day_of_month_factor:
+  salary_week: { days: [1, 7], factor: 1.18 }
+  mid_month: { days: [8, 24], factor: 1.00 }
+  month_end: { days: [25, 31], factor: 0.87 }
+
+# ---------------------------------------------------------------- monsoon
+# Mumbai monsoon. Order volume rises because nobody wants to go outside, while
+# fresh produce supply is disrupted - demand up and supply down at the same
+# time, which is exactly when availability management gets hard.
+monsoon:
+  months: [6, 7, 8, 9]
+  order_volume_factor: 1.15
+  fresh_supply_factor: 0.80
+  categories_boosted:
+    "Snacks & Namkeen": 1.22
+    "Beverages": 1.10
+    "Ready to Eat & Frozen": 1.18
+  categories_suppressed:
+    "Fruits & Vegetables": 0.92
+
+# ---------------------------------------------------------------- IPL
+# Evening match nights drive a sharp, narrow spike in snacks and cold drinks.
+ipl:
+  start_date: 2026-03-20
+  end_date: 2026-05-28
+  match_hours: [19, 23]
+  categories_boosted:
+    "Snacks & Namkeen": 1.55
+    "Beverages": 1.60
+    "Ready to Eat & Frozen": 1.25
+  # matches are not nightly - roughly 5 in 7 days during the window
+  matchday_probability: 0.71
+
+# ---------------------------------------------------------------- festivals
+# `lead_days` models the shopping run-up, which for the big ones is a larger
+# effect than the day itself.
+festivals:
+  - name: Ganesh Chaturthi
+    date: 2025-08-27
+    duration_days: 11
+    lead_days: 3
+    overall_factor: 1.28
+    categories: { "Dairy & Eggs": 1.65, "Fruits & Vegetables": 1.40, "Staples & Packaged Food": 1.30 }
+
+  - name: Navratri
+    date: 2025-09-22
+    duration_days: 9
+    lead_days: 2
+    overall_factor: 1.22
+    # fasting foods surge; grains and non-veg fall away sharply
+    categories:
+      { "Staples & Packaged Food": 1.85, "Dairy & Eggs": 1.55, "Fruits & Vegetables": 1.45,
+        "Meat, Fish & Seafood": 0.35, "Snacks & Namkeen": 0.80 }
+
+  - name: Dussehra
+    date: 2025-10-02
+    duration_days: 1
+    lead_days: 1
+    overall_factor: 1.15
+    categories: { "Snacks & Namkeen": 1.30, "Bakery": 1.25 }
+
+  - name: Diwali
+    date: 2025-10-20
+    duration_days: 5
+    lead_days: 7
+    overall_factor: 1.55
+    categories:
+      { "Snacks & Namkeen": 1.90, "Dairy & Eggs": 1.60, "Bakery": 1.70,
+        "Household & Cleaning": 1.45, "Beverages": 1.35 }
+
+  - name: Christmas
+    date: 2025-12-25
+    duration_days: 2
+    lead_days: 3
+    overall_factor: 1.20
+    categories: { "Bakery": 1.75, "Ready to Eat & Frozen": 1.40, "Beverages": 1.30 }
+
+  - name: New Year
+    date: 2026-01-01
+    duration_days: 2
+    lead_days: 2
+    overall_factor: 1.32
+    categories: { "Beverages": 1.65, "Snacks & Namkeen": 1.50, "Ready to Eat & Frozen": 1.35 }
+
+  - name: Makar Sankranti
+    date: 2026-01-14
+    duration_days: 2
+    lead_days: 2
+    overall_factor: 1.14
+    categories: { "Staples & Packaged Food": 1.35, "Dairy & Eggs": 1.20 }
+
+  - name: Maha Shivaratri
+    date: 2026-02-15
+    duration_days: 1
+    lead_days: 1
+    overall_factor: 1.10
+    categories: { "Dairy & Eggs": 1.45, "Fruits & Vegetables": 1.30, "Meat, Fish & Seafood": 0.40 }
+
+  - name: Holi
+    date: 2026-03-03
+    duration_days: 2
+    lead_days: 3
+    overall_factor: 1.30
+    categories: { "Snacks & Namkeen": 1.55, "Dairy & Eggs": 1.50, "Beverages": 1.40 }
+
+  - name: Eid al-Fitr
+    date: 2026-03-20
+    duration_days: 2
+    lead_days: 4
+    overall_factor: 1.24
+    categories: { "Meat, Fish & Seafood": 1.85, "Dairy & Eggs": 1.45, "Bakery": 1.40 }
+
+  - name: Gudi Padwa
+    date: 2026-03-19
+    duration_days: 1
+    lead_days: 2
+    overall_factor: 1.18
+    categories: { "Dairy & Eggs": 1.40, "Staples & Packaged Food": 1.25 }
+
+  - name: Ram Navami
+    date: 2026-03-26
+    duration_days: 1
+    lead_days: 1
+    overall_factor: 1.08
+    categories: { "Dairy & Eggs": 1.30, "Fruits & Vegetables": 1.20 }
+
+  - name: Akshaya Tritiya
+    date: 2026-04-19
+    duration_days: 1
+    lead_days: 1
+    overall_factor: 1.06
+    categories: { "Staples & Packaged Food": 1.15 }
+
+  - name: Independence Day
+    date: 2026-08-15
+    duration_days: 1
+    lead_days: 1
+    overall_factor: 1.12
+    categories: { "Snacks & Namkeen": 1.30, "Beverages": 1.25 }
+
+  - name: Raksha Bandhan
+    date: 2026-08-28
+    duration_days: 1
+    lead_days: 2
+    overall_factor: 1.16
+    categories: { "Dairy & Eggs": 1.50, "Bakery": 1.45, "Snacks & Namkeen": 1.30 }
+
+# ---------------------------------------------------------------- intraday
+# Two peaks, and they are not the same peak for every category. Dairy and bakery
+# go out with breakfast; snacks and ready meals go out at night. A single
+# store-day forecast hides this entirely, which is why availability is measured
+# hourly and not from a midnight snapshot.
+hour_curves:
+  morning: # dairy, bakery, fruit
+    [0.0040, 0.0020, 0.0010, 0.0010, 0.0030, 0.0200, 0.0700, 0.1100, 0.1150, 0.0950,
+     0.0700, 0.0520, 0.0450, 0.0380, 0.0330, 0.0320, 0.0360, 0.0450, 0.0580, 0.0620,
+     0.0500, 0.0320, 0.0180, 0.0080]
+  evening: # snacks, beverages, ready to eat
+    [0.0100, 0.0050, 0.0020, 0.0010, 0.0020, 0.0060, 0.0180, 0.0300, 0.0380, 0.0400,
+     0.0380, 0.0400, 0.0480, 0.0420, 0.0380, 0.0420, 0.0580, 0.0800, 0.1050, 0.1180,
+     0.1080, 0.0780, 0.0380, 0.0150]
+  flat: # staples, household, personal care
+    [0.0063, 0.0032, 0.0021, 0.0011, 0.0021, 0.0105, 0.0337, 0.0526, 0.0611, 0.0632,
+     0.0611, 0.0579, 0.0579, 0.0547, 0.0526, 0.0526, 0.0579, 0.0653, 0.0737, 0.0756,
+     0.0632, 0.0505, 0.0274, 0.0137]

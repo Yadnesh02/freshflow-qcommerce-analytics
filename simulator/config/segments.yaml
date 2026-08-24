@@ -1,0 +1,141 @@
+# =============================================================================
+# Customer segments - the latent behavioural truth
+# =============================================================================
+# These labels are generator ground truth. Nothing under analytics/ may read
+# them; the customer segmentation in mart_customer_360 must be *inferred* from
+# order history. The import-boundary test enforces that structurally.
+#
+# The point of five segments rather than one average customer: a network-level
+# elasticity is a weighted average of very different behaviours, and the
+# markdown optimiser gets meaningfully better once it conditions on who is
+# actually shopping in a given catchment.
+# =============================================================================
+
+version: 1
+
+segments:
+  - name: price_sensitive
+    share: 0.28
+    description: >
+      Watches price closely, buys staples and value packs, shops the whole
+      basket in one weekly trip plus top-ups.
+    orders_per_month: [2.5, 6.0]
+    basket_items: [7, 16]
+    basket_value_index: 0.95
+    elasticity_multiplier: 1.45
+    private_label_affinity: 1.60
+    freshness_sensitivity: 0.85
+    delivery_fee_tolerance: 25
+    promo_responsiveness: 1.35
+    category_bias: { "Staples & Packaged Food": 1.35, "Household & Cleaning": 1.20, "Health & Wellness": 0.70 }
+
+  - name: convenience
+    share: 0.30
+    description: >
+      Buys small and often, because the alternative is walking to a shop. Least
+      price-aware segment by volume and the backbone of order frequency.
+    orders_per_month: [6.0, 14.0]
+    basket_items: [2, 6]
+    basket_value_index: 0.62
+    elasticity_multiplier: 0.70
+    private_label_affinity: 0.95
+    freshness_sensitivity: 1.10
+    delivery_fee_tolerance: 45
+    promo_responsiveness: 0.80
+    category_bias: { "Dairy & Eggs": 1.30, "Bakery": 1.25, "Beverages": 1.20, "Staples & Packaged Food": 0.65 }
+
+  - name: premium
+    share: 0.14
+    description: >
+      Brand-led, quality-led, largely indifferent to price. Rejects near-expiry
+      stock hardest, which is why deep markdowns do not reach this segment.
+    orders_per_month: [4.0, 9.0]
+    basket_items: [5, 14]
+    basket_value_index: 1.85
+    elasticity_multiplier: 0.42
+    private_label_affinity: 0.45
+    freshness_sensitivity: 1.55
+    delivery_fee_tolerance: 90
+    promo_responsiveness: 0.45
+    category_bias:
+      { "Health & Wellness": 1.70, "Ready to Eat & Frozen": 1.40, "Fruits & Vegetables": 1.30,
+        "Personal Care": 1.25, "Staples & Packaged Food": 0.70 }
+
+  - name: bulk_planner
+    share: 0.16
+    description: >
+      Large monthly shop, plans ahead, stocks up. Low frequency but high value,
+      and the segment most worth protecting from stockouts.
+    orders_per_month: [1.2, 3.5]
+    basket_items: [14, 34]
+    basket_value_index: 2.40
+    elasticity_multiplier: 0.95
+    private_label_affinity: 1.25
+    freshness_sensitivity: 1.20
+    delivery_fee_tolerance: 60
+    promo_responsiveness: 1.05
+    category_bias: { "Staples & Packaged Food": 1.55, "Household & Cleaning": 1.40, "Baby & Pet Care": 1.30 }
+
+  - name: deal_hunter
+    share: 0.12
+    description: >
+      Orders when there is an offer and largely not otherwise. Generates real
+      GMV and very little contribution - the segment that makes problem P7
+      worth solving, because a naive retention metric counts them as a success.
+    orders_per_month: [3.0, 10.0]
+    basket_items: [3, 10]
+    basket_value_index: 0.70
+    elasticity_multiplier: 2.10
+    private_label_affinity: 1.30
+    freshness_sensitivity: 0.55
+    delivery_fee_tolerance: 10
+    promo_responsiveness: 2.40
+    category_bias: { "Snacks & Namkeen": 1.35, "Beverages": 1.25, "Health & Wellness": 0.60 }
+
+# -----------------------------------------------------------------------------
+# Churn hazard
+# -----------------------------------------------------------------------------
+# Monthly probability of going dormant, and what moves it. This is the
+# mechanism that makes better inventory decisions actually *cause* retention -
+# without it, any retention lift found in the experiment would be a coincidence
+# asserted rather than a result measured.
+#
+# Multipliers apply per event in the trailing 30 days, compounding.
+# -----------------------------------------------------------------------------
+churn:
+  base_monthly_hazard:
+    price_sensitive: 0.075
+    convenience: 0.048
+    premium: 0.036
+    bulk_planner: 0.042
+    deal_hunter: 0.155
+
+  # tenure protects: the longer someone has stayed, the likelier they stay
+  tenure_decay_per_month: 0.965
+  tenure_floor: 0.55
+
+  worsened_by:
+    stockout_on_favourite_sku: 1.22 # per occurrence, capped below
+    received_low_dte_item: 1.14 # remaining shelf life under 25%
+    late_delivery: 1.18
+    order_cancelled: 1.45
+  max_worsening_multiplier: 2.60
+
+  improved_by:
+    successful_deal_redemption: 0.93
+    consistent_availability_30d: 0.88 # no stockout on any favourite
+  min_improvement_multiplier: 0.70
+
+# -----------------------------------------------------------------------------
+# Acquisition - new customers arriving over the simulation window
+# -----------------------------------------------------------------------------
+acquisition:
+  initial_customers: 28000
+  monthly_new_customers: [1100, 2200]
+  # new stores acquire faster in their first 90 days
+  new_store_uplift: 2.10
+  channel_mix:
+    organic: 0.34
+    paid_social: 0.28
+    referral: 0.21
+    app_store: 0.17

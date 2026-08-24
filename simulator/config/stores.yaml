@@ -1,0 +1,188 @@
+# =============================================================================
+# Dark store network - 14 stores across Mumbai
+# =============================================================================
+# Coordinates are approximate locality centroids, good enough for distance-based
+# transfer costs. They are not real store addresses; FreshFlow is fictional.
+#
+# `demand_index` is the store's share of network demand relative to the mean.
+# It encodes catchment population and order density, not store size.
+#
+# `category_affinity` overrides the network-wide category mix. Powai and Lower
+# Parel over-index on ready-to-eat because of the office/IT catchment; Dadar and
+# Ghatkopar over-index on staples because of larger resident households. This is
+# what makes per-store assortment and markdown decisions differ - without it,
+# every store is a scaled copy of every other and the transfer engine has
+# nothing to solve.
+# =============================================================================
+
+version: 1
+
+defaults:
+  serviceable_radius_km: 3.0
+  chilled_capacity_units: 2400
+  ambient_capacity_units: 9000
+  frozen_capacity_units: 900
+  daily_operating_hours: [6, 24] # 06:00 to 24:00 IST
+
+stores:
+  - store_id: FF-AND-01
+    store_name: FreshFlow Andheri West
+    locality: Andheri West
+    pincode: "400058"
+    lat: 19.1364
+    lon: 72.8296
+    catchment_tier: mid
+    demand_index: 1.24
+    opened_date: 2023-04-12
+    category_affinity: { "Snacks & Namkeen": 1.15, "Beverages": 1.10 }
+
+  - store_id: FF-BAN-01
+    store_name: FreshFlow Bandra West
+    locality: Bandra West
+    pincode: "400050"
+    lat: 19.0596
+    lon: 72.8295
+    catchment_tier: premium
+    demand_index: 1.18
+    chilled_capacity_units: 3000
+    opened_date: 2023-02-20
+    category_affinity:
+      { "Dairy & Eggs": 1.20, "Fruits & Vegetables": 1.25, "Health & Wellness": 1.30 }
+
+  - store_id: FF-POW-01
+    store_name: FreshFlow Powai
+    locality: Powai
+    pincode: "400076"
+    lat: 19.1176
+    lon: 72.9060
+    catchment_tier: premium
+    demand_index: 1.12
+    opened_date: 2023-06-01
+    category_affinity:
+      { "Ready to Eat & Frozen": 1.45, "Beverages": 1.20, "Staples & Packaged Food": 0.80 }
+
+  - store_id: FF-THA-01
+    store_name: FreshFlow Thane West
+    locality: Thane West
+    pincode: "400601"
+    lat: 19.1972
+    lon: 72.9722
+    catchment_tier: mid
+    demand_index: 1.08
+    ambient_capacity_units: 10500
+    opened_date: 2023-08-15
+    category_affinity: { "Baby & Pet Care": 1.25, "Household & Cleaning": 1.15 }
+
+  - store_id: FF-DAD-01
+    store_name: FreshFlow Dadar
+    locality: Dadar
+    pincode: "400028"
+    lat: 19.0178
+    lon: 72.8478
+    catchment_tier: mid
+    demand_index: 1.02
+    opened_date: 2023-03-08
+    category_affinity: { "Staples & Packaged Food": 1.30, "Fruits & Vegetables": 1.15 }
+
+  - store_id: FF-MAL-01
+    store_name: FreshFlow Malad West
+    locality: Malad West
+    pincode: "400064"
+    lat: 19.1868
+    lon: 72.8479
+    catchment_tier: mass
+    demand_index: 0.96
+    opened_date: 2023-09-22
+    category_affinity: { "Staples & Packaged Food": 1.20, "Health & Wellness": 0.75 }
+
+  - store_id: FF-CHE-01
+    store_name: FreshFlow Chembur
+    locality: Chembur
+    pincode: "400071"
+    lat: 19.0522
+    lon: 72.9005
+    catchment_tier: mid
+    demand_index: 0.94
+    opened_date: 2023-11-05
+    category_affinity: { "Dairy & Eggs": 1.10 }
+
+  - store_id: FF-VAS-01
+    store_name: FreshFlow Vashi
+    locality: Vashi
+    pincode: "400703"
+    lat: 19.0771
+    lon: 72.9986
+    catchment_tier: mid
+    demand_index: 0.91
+    opened_date: 2024-01-18
+    category_affinity: { "Baby & Pet Care": 1.20, "Snacks & Namkeen": 1.10 }
+
+  - store_id: FF-BOR-01
+    store_name: FreshFlow Borivali East
+    locality: Borivali East
+    pincode: "400066"
+    lat: 19.2307
+    lon: 72.8567
+    catchment_tier: mass
+    demand_index: 0.89
+    opened_date: 2024-02-14
+    category_affinity: { "Staples & Packaged Food": 1.25, "Ready to Eat & Frozen": 0.70 }
+
+  - store_id: FF-LPA-01
+    store_name: FreshFlow Lower Parel
+    locality: Lower Parel
+    pincode: "400013"
+    lat: 18.9960
+    lon: 72.8302
+    catchment_tier: premium
+    demand_index: 0.86
+    chilled_capacity_units: 2800
+    opened_date: 2024-03-30
+    category_affinity:
+      { "Ready to Eat & Frozen": 1.55, "Beverages": 1.30, "Staples & Packaged Food": 0.65 }
+
+  - store_id: FF-GHA-01
+    store_name: FreshFlow Ghatkopar
+    locality: Ghatkopar
+    pincode: "400077"
+    lat: 19.0860
+    lon: 72.9080
+    catchment_tier: mass
+    demand_index: 0.84
+    opened_date: 2024-05-11
+    category_affinity: { "Staples & Packaged Food": 1.28, "Snacks & Namkeen": 1.12 }
+
+  - store_id: FF-KAN-01
+    store_name: FreshFlow Kandivali West
+    locality: Kandivali West
+    pincode: "400067"
+    lat: 19.2095
+    lon: 72.8320
+    catchment_tier: mid
+    demand_index: 0.82
+    opened_date: 2024-07-06
+    category_affinity: { "Household & Cleaning": 1.20 }
+
+  - store_id: FF-MUL-01
+    store_name: FreshFlow Mulund West
+    locality: Mulund West
+    pincode: "400080"
+    lat: 19.1726
+    lon: 72.9425
+    catchment_tier: mid
+    demand_index: 0.79
+    opened_date: 2024-09-19
+    category_affinity: { "Baby & Pet Care": 1.15, "Dairy & Eggs": 1.08 }
+
+  # newest store - deliberately opened mid-window so the models have to cope
+  # with a partial history rather than a clean 365 days everywhere
+  - store_id: FF-GOR-01
+    store_name: FreshFlow Goregaon East
+    locality: Goregaon East
+    pincode: "400063"
+    lat: 19.1663
+    lon: 72.8526
+    catchment_tier: mid
+    demand_index: 0.75
+    opened_date: 2026-01-15
+    category_affinity: { "Beverages": 1.15 }

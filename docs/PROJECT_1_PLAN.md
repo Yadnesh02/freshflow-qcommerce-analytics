@@ -215,7 +215,7 @@ Orchestrated as a **Dagster asset graph** with a daily schedule and asset checks
 
 ### Scale targets
 - **14 dark stores** across Mumbai: Andheri W, Bandra W, Powai, Thane W, Dadar, Malad W, Chembur, Vashi, Borivali E, Lower Parel, Ghatkopar, Kandivali W, Mulund W, Goregaon E
-- **1,500 SKUs** — ~380 perishable (shelf life 2–10 days), ~130 private label ("Nomi")
+- **1,500 SKUs** across 12 categories and 58 subcategories — ~325 perishable (shelf life ≤ 14 days), ~131 private label ("Nomi")
 - **365 days** of history
 - **~45,000 customers**, ~1.6M orders, ~5.5M order items, ~700k inventory batches
 - Total on disk: ~1.5 GB Parquet. DuckDB queries in single-digit seconds.
