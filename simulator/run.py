@@ -631,6 +631,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", type=Path, default=RAW_DIR)
     ap.add_argument("--keep", action="store_true", help="do not clear the output directory first")
+    ap.add_argument(
+        "--clean",
+        action="store_true",
+        help="skip the data-defect injection pass (default: inject, like a real feed)",
+    )
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
@@ -642,6 +647,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     frame = run.run()
     run.report(frame)
+
+    if not args.clean:
+        from simulator.dirt import DirtInjector, write_docs
+
+        print()
+        defects = DirtInjector(args.out, seed=args.seed, quiet=args.quiet).apply()
+        write_docs(defects, ROOT / "docs" / "known_data_issues.md")
     return 0
 
 

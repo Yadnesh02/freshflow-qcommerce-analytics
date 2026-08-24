@@ -89,7 +89,7 @@ Run `python tasks.py --help` for the full target list.
 | [Execution plan](docs/EXECUTION_PLAN.md) | Setup commands, 47 build tasks, acceptance gates |
 | [Data model (ERD)](docs/img/erd.md) | The warehouse model — three diagrams, 31 entities, plus a table catalogue |
 | [Metric dictionary](docs/metrics.md) | 31 metrics, generated from `semantic/metrics.yml` — never hand-edited |
-| Known data issues | Defects deliberately injected into the raw layer — *arrives in Sprint 1* |
+| [Known data issues](docs/known_data_issues.md) | The eight defects deliberately injected into the raw layer, and how staging handles each |
 
 ## Licence
 
