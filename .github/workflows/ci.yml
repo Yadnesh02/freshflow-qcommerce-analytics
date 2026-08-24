@@ -41,6 +41,11 @@ jobs:
       - name: Tests
         run: uv run pytest --cov=analytics --cov=semantic --cov=simulator --cov-report=term-missing
 
+      # the metric dictionary is generated from metrics.yml - fail if the
+      # committed copy has drifted from the registry
+      - name: Metric dictionary is current
+        run: uv run python -m semantic.generate_docs --check
+
       # dbt runs on a small generated slice so CI stays under a minute.
       # Skipped until the simulator and models land (S1.7 / S2.1).
       - name: Check for dbt models

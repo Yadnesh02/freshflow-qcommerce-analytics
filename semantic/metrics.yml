@@ -104,11 +104,15 @@ metrics:
     type: ratio
     source: mart_order_daily
     numerator: "SUM(net_revenue)"
-    denominator: "NULLIF(COUNT(DISTINCT order_id), 0)"
+    denominator: "NULLIF(SUM(orders_count), 0)"
     grain: [store, date_day]
     format: inr
     tests:
       - between: [50, 5000]
+    notes: >
+      mart_order_daily is pre-aggregated to store x day, so orders are summed
+      from a count column rather than counted distinct. Counting DISTINCT
+      order_id here would be a column that does not exist at this grain.
 
 # -----------------------------------------------------------------------------
 # WASTAGE & FRESHNESS  -  problem P1

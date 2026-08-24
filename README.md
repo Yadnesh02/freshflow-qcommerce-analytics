@@ -87,8 +87,9 @@ Run `python tasks.py --help` for the full target list.
 | [Project plan](docs/PROJECT_1_PLAN.md) | Business problems, metric definitions, data model, workstreams, impact methodology |
 | [Project plan (PDF)](docs/FreshFlow_Project_Plan.pdf) | Same, formatted |
 | [Execution plan](docs/EXECUTION_PLAN.md) | Setup commands, 47 build tasks, acceptance gates |
-| [Metric dictionary](docs/metrics.md) | Generated from `semantic/metrics.yml` — never hand-edited |
-| [Known data issues](docs/known_data_issues.md) | Defects deliberately injected into the raw layer |
+| [Data model (ERD)](docs/img/erd.md) | The warehouse model — three diagrams, 31 entities, plus a table catalogue |
+| [Metric dictionary](docs/metrics.md) | 31 metrics, generated from `semantic/metrics.yml` — never hand-edited |
+| Known data issues | Defects deliberately injected into the raw layer — *arrives in Sprint 1* |
 
 ## Licence
 
