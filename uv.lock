@@ -918,7 +918,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.0" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "ruff", specifier = ">=0.7" },
+    { name = "ruff", specifier = ">=0.16.4,<0.17" },
     { name = "sqlfluff", specifier = ">=3.2" },
     { name = "sqlfluff-templater-dbt", specifier = ">=3.2" },
 ]

@@ -24,12 +24,12 @@ takes today's ₹11 deal slot, and which customers to nudge.
 
 ## Status
 
-🚧 **In development.** Sprint 0 of 5 — see [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
+🚧 **In development.** Sprint 1 of 5 — see [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
 
 | Sprint | Scope | State |
 |---|---|---|
-| 0 | Foundations, metric registry, CI | in progress |
-| 1 | Simulator & Bronze layer | — |
+| 0 | Foundations, metric registry, CI | ✅ done |
+| 1 | Simulator & Bronze layer | in progress |
 | 2 | Warehouse, dbt marts, data quality | — |
 | 3 | Forecast, expiry risk, live app | — |
 | 4 | Decision engine | — |
