@@ -115,11 +115,13 @@ def t_lint(args: argparse.Namespace) -> int:
     """Lint python and SQL."""
     fix = ["--fix"] if args.fix else []
     code = run([sys.executable, "-m", "ruff", "check", ".", *fix], check=False)
-    code |= run([sys.executable, "-m", "ruff", "format", "." if args.fix else "--check", "."],
-                check=False)
+    code |= run(
+        [sys.executable, "-m", "ruff", "format", "." if args.fix else "--check", "."], check=False
+    )
     if (TRANSFORM / "models").exists() and any((TRANSFORM / "models").rglob("*.sql")):
-        code |= run([sys.executable, "-m", "sqlfluff", "lint", "models"],
-                    cwd=TRANSFORM, check=False)
+        code |= run(
+            [sys.executable, "-m", "sqlfluff", "lint", "models"], cwd=TRANSFORM, check=False
+        )
     return 1 if code else 0
 
 
@@ -160,14 +162,32 @@ def t_demo_slice(_: argparse.Namespace) -> int:
 
 def t_api(args: argparse.Namespace) -> int:
     """Serve the metrics API locally."""
-    return run([sys.executable, "-m", "uvicorn", "serving.api.main:app",
-                "--reload", "--port", str(args.port)])
+    return run(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "serving.api.main:app",
+            "--reload",
+            "--port",
+            str(args.port),
+        ]
+    )
 
 
 def t_app(args: argparse.Namespace) -> int:
     """Serve the Streamlit control tower locally."""
-    return run([sys.executable, "-m", "streamlit", "run",
-                "serving/web/streamlit/Home.py", "--server.port", str(args.port)])
+    return run(
+        [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            "serving/web/streamlit/Home.py",
+            "--server.port",
+            str(args.port),
+        ]
+    )
 
 
 def t_dagster(_: argparse.Namespace) -> int:
@@ -190,8 +210,13 @@ def t_docs(_: argparse.Namespace) -> int:
 
 def t_clean(_: argparse.Namespace) -> int:
     """Remove build artefacts. Does NOT touch data/raw."""
-    for p in [TRANSFORM / "target", TRANSFORM / "dbt_packages", ROOT / ".pytest_cache",
-              ROOT / ".ruff_cache", ROOT / "logs"]:
+    for p in [
+        TRANSFORM / "target",
+        TRANSFORM / "dbt_packages",
+        ROOT / ".pytest_cache",
+        ROOT / ".ruff_cache",
+        ROOT / "logs",
+    ]:
         if p.exists():
             shutil.rmtree(p, ignore_errors=True)
             print(f"  removed {p.relative_to(ROOT)}")
@@ -211,17 +236,28 @@ def t_all(args: argparse.Namespace) -> int:
 
 # ----------------------------------------------------------------- cli
 TARGETS = {
-    "setup": t_setup, "simulate": t_simulate, "build": t_build, "test": t_test,
-    "lint": t_lint, "forecast": t_forecast, "recommend": t_recommend,
-    "experiment": t_experiment, "demo-slice": t_demo_slice, "api": t_api,
-    "app": t_app, "dagster": t_dagster, "docs": t_docs, "clean": t_clean, "all": t_all,
+    "setup": t_setup,
+    "simulate": t_simulate,
+    "build": t_build,
+    "test": t_test,
+    "lint": t_lint,
+    "forecast": t_forecast,
+    "recommend": t_recommend,
+    "experiment": t_experiment,
+    "demo-slice": t_demo_slice,
+    "api": t_api,
+    "app": t_app,
+    "dagster": t_dagster,
+    "docs": t_docs,
+    "clean": t_clean,
+    "all": t_all,
 }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        prog="tasks.py", description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        prog="tasks.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = parser.add_subparsers(dest="target", required=True, metavar="TARGET")
 
     for name, fn in TARGETS.items():
@@ -239,8 +275,14 @@ def main() -> int:
 
     args = parser.parse_args()
     # give t_all the flags its children expect
-    for attr, default in (("select", None), ("full_refresh", False),
-                          ("days", 365), ("seed", 42), ("fix", False), ("port", 8000)):
+    for attr, default in (
+        ("select", None),
+        ("full_refresh", False),
+        ("days", 365),
+        ("seed", 42),
+        ("fix", False),
+        ("port", 8000),
+    ):
         if not hasattr(args, attr):
             setattr(args, attr, default)
     return TARGETS[args.target](args)

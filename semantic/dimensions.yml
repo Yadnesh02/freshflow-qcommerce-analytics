@@ -1,0 +1,241 @@
+# =============================================================================
+# FreshFlow dimension registry
+# =============================================================================
+# What a metric may be sliced by, and how the resolver reaches it.
+#
+# Two kinds:
+#   - `join: null`  the column already sits on the mart, so it is a plain GROUP BY
+#   - `join: {...}` the resolver adds a left join to the dimension table
+#
+# A dimension is only offered for a metric when the metric's source carries the
+# join key. The resolver checks this and returns a 400 rather than a silently
+# wrong number.
+# =============================================================================
+
+version: 1
+
+dimensions:
+
+  # ---------------------------------------------------------------- location
+  store:
+    label: "Store"
+    description: "Dark store. The unit most operational decisions are made at."
+    key: store_id
+    attribute: store_name
+    join: {table: dim_store, join_on: store_id}
+
+  locality:
+    label: "Locality"
+    description: "Mumbai neighbourhood the store serves."
+    key: store_id
+    attribute: locality
+    join: {table: dim_store, join_on: store_id}
+
+  store_tier:
+    label: "Catchment Tier"
+    description: "premium / mid / mass - drives basket composition and elasticity."
+    key: store_id
+    attribute: catchment_tier
+    join: {table: dim_store, join_on: store_id}
+    values: [premium, mid, mass]
+
+  # ---------------------------------------------------------------- product
+  sku:
+    label: "SKU"
+    key: sku_id
+    attribute: sku_name
+    join: {table: dim_product, join_on: sku_id}
+
+  category:
+    label: "Category"
+    description: "L1 category: dairy, bakery, fruits & veg, packaged, personal care, household."
+    key: sku_id
+    attribute: l1_category
+    join: {table: dim_product, join_on: sku_id}
+
+  subcategory:
+    label: "Subcategory"
+    key: sku_id
+    attribute: l2_subcategory
+    join: {table: dim_product, join_on: sku_id}
+
+  brand:
+    label: "Brand"
+    key: sku_id
+    attribute: brand
+    join: {table: dim_product, join_on: sku_id}
+
+  is_private_label:
+    label: "Private Label"
+    description: "Platform-owned brand (Nomi) versus third-party."
+    key: sku_id
+    attribute: is_private_label
+    join: {table: dim_product, join_on: sku_id}
+
+  temp_zone:
+    label: "Temperature Zone"
+    key: sku_id
+    attribute: temp_zone
+    join: {table: dim_product, join_on: sku_id}
+    values: [frozen, chilled, ambient]
+
+  abc_class:
+    label: "ABC Class"
+    description: "Revenue contribution class. A is the ~10% of SKUs driving most volume."
+    key: sku_id
+    attribute: abc_class
+    join: {table: dim_product, join_on: sku_id}
+    values: [A, B, C]
+
+  xyz_class:
+    label: "XYZ Class"
+    description: "Demand-variability class. X is stable and forecastable, Z is erratic."
+    key: sku_id
+    attribute: xyz_class
+    join: {table: dim_product, join_on: sku_id}
+    values: [X, Y, Z]
+
+  # ---------------------------------------------------------------- time
+  date_day:
+    label: "Date"
+    key: date_day
+    attribute: date_day
+    join: null
+
+  week:
+    label: "Week"
+    key: date_day
+    attribute: week_start_date
+    join: {table: dim_date, join_on: date_day}
+
+  month:
+    label: "Month"
+    key: date_day
+    attribute: month_start_date
+    join: {table: dim_date, join_on: date_day}
+
+  day_of_week:
+    label: "Day of Week"
+    key: date_day
+    attribute: day_name
+    join: {table: dim_date, join_on: date_day}
+
+  is_festival:
+    label: "Festival Day"
+    description: "Navratri, Diwali, Ganesh Chaturthi, Holi - large category-specific swings."
+    key: date_day
+    attribute: is_festival
+    join: {table: dim_date, join_on: date_day}
+
+  is_monsoon:
+    label: "Monsoon"
+    description: "Jun-Sep. Order volume rises, fresh produce supply falls."
+    key: date_day
+    attribute: is_monsoon
+    join: {table: dim_date, join_on: date_day}
+
+  is_salary_week:
+    label: "Salary Week"
+    description: "1st-7th of the month. A real and large demand factor in India."
+    key: date_day
+    attribute: is_salary_week
+    join: {table: dim_date, join_on: date_day}
+
+  # ---------------------------------------------------------------- shelf life
+  dte_band:
+    label: "Days to Expiry Band"
+    description: >
+      Remaining shelf life bucket. The dimension the markdown optimizer is built
+      on - elasticity is not constant across it, because freshness aversion means
+      a customer will not take a two-day-old curd at the price they would take a
+      fresh one.
+    key: dte_band
+    attribute: dte_band
+    join: null
+    values: ["0-1d", "1-2d", "2-3d", "3-5d", "5-7d", "7d+"]
+
+  # ---------------------------------------------------------------- customer
+  customer_segment:
+    label: "Customer Segment"
+    description: "Behavioural segment inferred from order history - not the generator's label."
+    key: customer_id
+    attribute: customer_segment
+    join: {table: mart_customer_360, join_on: customer_id}
+
+  cohort_month:
+    label: "Signup Cohort"
+    key: customer_id
+    attribute: cohort_month
+    join: {table: mart_customer_360, join_on: customer_id}
+
+  rfm_segment:
+    label: "RFM Segment"
+    key: customer_id
+    attribute: rfm_segment
+    join: {table: mart_customer_360, join_on: customer_id}
+
+  ddi_band:
+    label: "Discount Dependency Band"
+    description: "Low / medium / high share of promo-containing orders."
+    key: customer_id
+    attribute: ddi_band
+    join: {table: mart_customer_360, join_on: customer_id}
+    values: [low, medium, high]
+
+  # ---------------------------------------------------------------- promotion
+  promo_type:
+    label: "Promotion Type"
+    key: promo_id
+    attribute: promo_type
+    join: {table: dim_promotion, join_on: promo_id}
+    values: [markdown, deal_11, bogo, bundle, free_delivery]
+
+  funding_source:
+    label: "Funding Source"
+    description: "Who pays for the discount. Only platform-funded subsidy hits GM-AWM."
+    key: promo_id
+    attribute: funding_source
+    join: {table: dim_promotion, join_on: promo_id}
+    values: [brand, platform]
+
+  # ---------------------------------------------------------------- supply
+  supplier:
+    label: "Supplier"
+    description: >
+      Kept as a first-class dimension because inbound freshness varies by
+      supplier, and that variance is an upstream cause of wastage rather than a
+      store-level failure.
+    key: supplier_id
+    attribute: supplier_name
+    join: {table: dim_supplier, join_on: supplier_id}
+
+  # ---------------------------------------------------------------- experiment
+  policy_arm:
+    label: "Policy Arm"
+    description: "Baseline versus optimized. Required to read any incrementality metric."
+    key: policy_arm
+    attribute: policy_arm
+    join: null
+    values: [baseline, optimized]
+
+  # ---------------------------------------------------------------- forecast
+  horizon_days:
+    label: "Forecast Horizon"
+    description: "Days ahead the prediction was made. Accuracy must always be read by horizon."
+    key: horizon_days
+    attribute: horizon_days
+    join: null
+
+  # ---------------------------------------------------------------- data quality
+  test_severity:
+    label: "Test Severity"
+    key: test_severity
+    attribute: test_severity
+    join: null
+    values: [warn, error]
+
+  source_name:
+    label: "Source"
+    key: source_name
+    attribute: source_name
+    join: null

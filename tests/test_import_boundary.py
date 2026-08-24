@@ -34,8 +34,7 @@ def _guarded_modules() -> list[Path]:
         pkg_dir = ROOT / pkg
         if pkg_dir.exists():
             files.extend(
-                p for p in pkg_dir.rglob("*.py")
-                if p.relative_to(ROOT) not in ALLOWED_EXCEPTIONS
+                p for p in pkg_dir.rglob("*.py") if p.relative_to(ROOT) not in ALLOWED_EXCEPTIONS
             )
     return sorted(files)
 
@@ -47,10 +46,9 @@ def _imported_roots(path: Path) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            # level > 0 is a relative import, which cannot escape its own package
-            if node.level == 0 and node.module:
-                roots.add(node.module.split(".")[0])
+        # level > 0 is a relative import, which cannot escape its own package
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
     return roots
 
 

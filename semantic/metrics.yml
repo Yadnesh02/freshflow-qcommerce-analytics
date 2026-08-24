@@ -1,0 +1,521 @@
+# =============================================================================
+# FreshFlow metric registry
+# =============================================================================
+# The single source of truth for every number this project publishes.
+#
+# Read by:
+#   - semantic/resolver.py     compiles a metric request into DuckDB SQL   (S3.6)
+#   - serving/api              /metrics/{name}                             (S3.7)
+#   - serving/web              every dashboard tile                        (S3.8)
+#   - semantic/generate_docs.py -> docs/metrics.md  (generated, never hand-edited)
+#   - tests/test_metrics_registry.py  schema contract                      (S0.3)
+#
+# RULE: if a number appears on a dashboard and is not defined here, it does not
+# ship. That is what makes "where is this metric defined?" a one-file answer.
+#
+# RATIO CORRECTNESS: every ratio is defined as numerator and denominator, which
+# are aggregated separately and divided once at the end. Never AVG() a per-row
+# ratio - that silently weights a store with 3 orders the same as one with 3,000.
+# =============================================================================
+
+version: 1
+
+north_star: gm_awm
+guardrail: retention_90d
+
+defaults:
+  owner: analytics
+  direction: up_is_good
+
+# -----------------------------------------------------------------------------
+# EXECUTIVE  -  the P&L spine
+# -----------------------------------------------------------------------------
+metrics:
+
+  gm_awm:
+    label: "Gross Margin after Wastage & Markdown"
+    description: >
+      Net revenue less COGS, expiry write-offs and platform-funded markdown
+      subsidy, as a share of net revenue. The project's north star: it is the
+      only metric that cannot be gamed by trading one problem for another.
+      Cutting stock lowers wastage but starves revenue; discounting deeply
+      clears stock but burns subsidy. Both show up here.
+    family: executive
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(net_revenue - cogs - writeoff_value - markdown_subsidy_platform)"
+    denominator: "NULLIF(SUM(net_revenue), 0)"
+    grain: [store, date_day]
+    format: percent_1dp
+    direction: up_is_good
+    guarded_by: retention_90d
+    tests:
+      - between: [-0.20, 0.60]
+    notes: >
+      Brand-funded markdown is excluded from the subsidy term because the
+      platform does not pay for it. Check funding_source before changing this.
+
+  net_revenue:
+    label: "Net Revenue"
+    description: >
+      Realized item revenue after discounts, excluding delivery fees and GST.
+      The revenue line every margin ratio is divided by.
+    family: executive
+    type: measure
+    source: agg_store_sku_day
+    expression: "SUM(net_revenue)"
+    grain: [store, date_day]
+    format: inr
+    tests:
+      - not_null: true
+
+  cogs_value:
+    label: "COGS"
+    description: "Landed cost of units sold, batch-attributed via FEFO allocation."
+    family: executive
+    type: measure
+    source: agg_store_sku_day
+    expression: "SUM(cogs)"
+    grain: [store, date_day]
+    format: inr
+    direction: down_is_good
+
+  gross_margin_pct:
+    label: "Gross Margin %"
+    description: >
+      Margin before wastage and subsidy. Shown next to GM-AWM deliberately:
+      the gap between the two is the cost of the perishability problem.
+    family: executive
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(net_revenue - cogs)"
+    denominator: "NULLIF(SUM(net_revenue), 0)"
+    grain: [store, date_day]
+    format: percent_1dp
+    tests:
+      - between: [-0.10, 0.70]
+
+  aov:
+    label: "Average Order Value"
+    description: >
+      Net revenue per delivered order. Read next to basket size uplift:
+      AOV can rise simply because cheap items went out of stock.
+    family: executive
+    type: ratio
+    source: mart_order_daily
+    numerator: "SUM(net_revenue)"
+    denominator: "NULLIF(COUNT(DISTINCT order_id), 0)"
+    grain: [store, date_day]
+    format: inr
+    tests:
+      - between: [50, 5000]
+
+# -----------------------------------------------------------------------------
+# WASTAGE & FRESHNESS  -  problem P1
+# -----------------------------------------------------------------------------
+
+  wastage_rate_value:
+    label: "Wastage Rate (value)"
+    description: >
+      Value of expiry write-offs as a share of the value of inventory received.
+      Measured in rupees, not units - one wasted paneer is not one wasted banana.
+    family: wastage
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(writeoff_value)"
+    denominator: "NULLIF(SUM(received_value), 0)"
+    grain: [store, category, week]
+    format: percent_1dp
+    direction: down_is_good
+    tests:
+      - between: [0.0, 0.35]
+    notes: >
+      Denominator is received value, not sold value. Using sold value makes the
+      rate fall when sales fall, which is exactly backwards.
+
+  wastage_value:
+    label: "Wastage Value"
+    description: "Rupee value of inventory written off at expiry."
+    family: wastage
+    type: measure
+    source: agg_store_sku_day
+    expression: "SUM(writeoff_value)"
+    grain: [store, category, date_day]
+    format: inr
+    direction: down_is_good
+
+  sell_through_rate:
+    label: "Sell-Through Rate"
+    description: "Units sold as a share of units available (opening stock plus receipts)."
+    family: wastage
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(units_sold)"
+    denominator: "NULLIF(SUM(opening_units + received_units), 0)"
+    grain: [store, sku, week]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+    notes: >
+      The denominator must include opening stock. Dropping it flatters the
+      number on every SKU that carries inventory across days.
+
+  dte_at_sale_p10:
+    label: "Days to Expiry at Sale (P10)"
+    description: >
+      10th percentile of remaining shelf life at the moment of sale. The
+      customer-experience metric behind wastage: the mean hides the tail, and
+      the tail is what gets a one-star review.
+    family: wastage
+    type: measure
+    source: fct_order_item
+    expression: "QUANTILE_CONT(dte_at_sale, 0.10)"
+    grain: [store, category, week]
+    format: days_1dp
+    direction: up_is_good
+    tests:
+      - between: [0, 60]
+
+  expiry_value_at_risk:
+    label: "Expiry Value at Risk"
+    description: >
+      Landed-cost value of on-hand units the forecast says will not sell before
+      expiry. The number the action queue is ranked by.
+    family: wastage
+    type: measure
+    source: mart_expiry_risk
+    expression: "SUM(units_at_risk * unit_landed_cost)"
+    grain: [store, category, date_day]
+    format: inr
+    direction: down_is_good
+
+# -----------------------------------------------------------------------------
+# AVAILABILITY & INVENTORY  -  problems P3, P4
+# -----------------------------------------------------------------------------
+
+  in_stock_pct:
+    label: "In-Stock %"
+    description: >
+      Share of assortment hours where on-hand was above zero. Time-weighted,
+      not a midnight snapshot - a snapshot at 00:00 cannot see the 8pm stockout
+      that actually cost the order.
+    family: availability
+    type: ratio
+    source: fct_availability_hour
+    numerator: "SUM(CASE WHEN on_hand_units > 0 THEN 1 ELSE 0 END)"
+    denominator: "COUNT(*)"
+    grain: [store, sku, date_day]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+
+  fill_rate:
+    label: "Fill Rate"
+    description: >
+      Units fulfilled as a share of units demanded. Uses imputed demand, so it
+      counts what customers wanted, not only what they managed to buy.
+    family: availability
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(units_sold)"
+    denominator: "NULLIF(SUM(units_demanded_imputed), 0)"
+    grain: [store, sku, date_day]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+    notes: "Depends on the censored-demand imputation in S3.1. Meaningless without it."
+
+  lost_sales_units:
+    label: "Lost Sales (units)"
+    description: "Imputed demand that went unfulfilled because stock hit zero."
+    family: availability
+    type: measure
+    source: agg_store_sku_day
+    expression: "SUM(GREATEST(units_demanded_imputed - units_sold, 0))"
+    grain: [store, sku, date_day]
+    format: number_0dp
+    direction: down_is_good
+
+  days_of_cover:
+    label: "Days of Cover"
+    description: >
+      On-hand units divided by trailing 7-day average daily sales, capped at
+      remaining shelf life. Twenty days of cover on a three-day product is not
+      twenty days of cover - it is nineteen days of write-off.
+    family: availability
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(closing_units)"
+    denominator: "NULLIF(SUM(trailing_7d_avg_units), 0)"
+    grain: [store, sku, date_day]
+    format: days_1dp
+    direction: neutral
+    tests:
+      - between: [0, 400]
+
+# -----------------------------------------------------------------------------
+# FORECAST QUALITY  -  problem P4
+# -----------------------------------------------------------------------------
+
+  forecast_wape:
+    label: "Forecast WAPE"
+    description: >
+      Weighted absolute percentage error. WAPE not MAPE: MAPE divides by actuals
+      per row and explodes on the low-volume SKUs that make up most of the tail.
+    family: forecast
+    type: ratio
+    source: mart_forecast_accuracy
+    numerator: "SUM(ABS(actual_units - forecast_units))"
+    denominator: "NULLIF(SUM(actual_units), 0)"
+    grain: [store, sku, horizon_days, date_day]
+    format: percent_1dp
+    direction: down_is_good
+    tests:
+      - between: [0.0, 3.0]
+    notes: "Evaluate on uncensored days only, or you are grading the model on stockouts."
+
+  forecast_bias:
+    label: "Forecast Bias"
+    description: >
+      Signed error as a share of actuals. Separated from WAPE because a model
+      can be accurate and consistently low, which quietly under-orders forever.
+    family: forecast
+    type: ratio
+    source: mart_forecast_accuracy
+    numerator: "SUM(forecast_units - actual_units)"
+    denominator: "NULLIF(SUM(actual_units), 0)"
+    grain: [store, sku, date_day]
+    format: percent_1dp
+    direction: neutral
+    tests:
+      - between: [-1.0, 1.0]
+
+  forecast_value_add:
+    label: "Forecast Value Add"
+    description: >
+      Seasonal-naive WAPE minus model WAPE. If this is not positive the model is
+      theatre, and the honest move is to report that and use the naive rule.
+    family: forecast
+    type: ratio
+    source: mart_forecast_accuracy
+    numerator: "SUM(ABS(actual_units - naive_units)) - SUM(ABS(actual_units - forecast_units))"
+    denominator: "NULLIF(SUM(actual_units), 0)"
+    grain: [abc_class, xyz_class]
+    format: percent_1dp
+    direction: up_is_good
+
+# -----------------------------------------------------------------------------
+# PRICING & MARKDOWN  -  problem P2
+# -----------------------------------------------------------------------------
+
+  markdown_depth:
+    label: "Markdown Depth"
+    description: "Unit-weighted discount off base price on marked-down units."
+    family: pricing
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM((base_price_avg - realized_price_avg) * markdown_units)"
+    denominator: "NULLIF(SUM(base_price_avg * markdown_units), 0)"
+    grain: [store, category, date_day]
+    format: percent_1dp
+    direction: neutral
+    tests:
+      - between: [0.0, 0.90]
+
+  markdown_subsidy_value:
+    label: "Markdown Subsidy (platform-funded)"
+    description: "Rupee cost of discount the platform pays for, excluding brand-funded promotions."
+    family: pricing
+    type: measure
+    source: agg_store_sku_day
+    expression: "SUM(markdown_subsidy_platform)"
+    grain: [store, category, date_day]
+    format: inr
+    direction: down_is_good
+
+  discount_leakage_value:
+    label: "Discount Leakage"
+    description: >
+      Discount rupees given to units the model says would have sold at full
+      price anyway. The metric that proves the optimizer is smart rather than
+      merely generous - a flat markdown ladder maximises this without noticing.
+    family: pricing
+    type: measure
+    source: mart_markdown_perf
+    expression: "SUM(CASE WHEN p_sell_full_price > 0.80 THEN discount_value ELSE 0 END)"
+    grain: [store, sku, week]
+    format: inr
+    direction: down_is_good
+    tests:
+      - between: [0, 10000000]
+
+  margin_recovery_rate:
+    label: "Margin Recovery Rate"
+    description: >
+      Gross margin realized on marked-down units against their landed cost.
+      The counterfactual is minus one hundred percent, because the alternative
+      to a bad markdown is a total write-off.
+    family: pricing
+    type: ratio
+    source: mart_markdown_perf
+    numerator: "SUM(realized_revenue - landed_cost_value)"
+    denominator: "NULLIF(SUM(landed_cost_value), 0)"
+    grain: [store, category, week]
+    format: percent_1dp
+    tests:
+      - between: [-1.0, 2.0]
+
+# -----------------------------------------------------------------------------
+# PROMOTIONS & MERCHANDISING  -  problems P5, P6
+# -----------------------------------------------------------------------------
+
+  subsidy_per_incremental_order:
+    label: "Subsidy per Incremental Order"
+    description: >
+      Deal subsidy divided by orders above the control-implied baseline. Without
+      a holdout this number is fiction, so the denominator is defined against
+      the experiment control arm, never against a naive period-over-period lift.
+    family: promotion
+    type: ratio
+    source: mart_deal_slot_perf
+    numerator: "SUM(subsidy_value)"
+    denominator: "NULLIF(SUM(orders - control_implied_orders), 0)"
+    grain: [store, week]
+    format: inr
+    direction: down_is_good
+    requires_experiment: true
+
+  basket_size_uplift:
+    label: "Basket Size Uplift"
+    description: "Net revenue per order on deal-containing orders versus control orders."
+    family: promotion
+    type: ratio
+    source: mart_deal_slot_perf
+    numerator: "SUM(treated_basket_value) - SUM(control_basket_value)"
+    denominator: "NULLIF(SUM(control_basket_value), 0)"
+    grain: [store, week]
+    format: percent_1dp
+    requires_experiment: true
+
+  private_label_gmv_share:
+    label: "Private Label GMV Share"
+    description: >
+      Share of net revenue from platform-owned brands. Read alongside
+      cannibalization: share that comes from replacing a brand sale is worth
+      far less than share that adds to the basket.
+    family: merchandising
+    type: ratio
+    source: agg_store_sku_day
+    numerator: "SUM(CASE WHEN is_private_label THEN net_revenue ELSE 0 END)"
+    denominator: "NULLIF(SUM(net_revenue), 0)"
+    grain: [store, category, week]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+
+# -----------------------------------------------------------------------------
+# CUSTOMERS & RETENTION  -  problem P7
+# -----------------------------------------------------------------------------
+
+  retention_90d:
+    label: "90-Day Retention"
+    description: >
+      Share of customers active in the trailing 90 days who were also active in
+      the prior 90. The guardrail on GM-AWM: margin bought by starving stores of
+      stock shows up here as churn.
+    family: customer
+    type: ratio
+    source: mart_customer_360
+    numerator: "COUNT(DISTINCT CASE WHEN active_curr_90d AND active_prev_90d THEN customer_id END)"
+    denominator: "NULLIF(COUNT(DISTINCT CASE WHEN active_prev_90d THEN customer_id END), 0)"
+    grain: [store, cohort_month]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+
+  retention_m1:
+    label: "M1 Cohort Retention"
+    description: "Share of a signup cohort that ordered again in their first full month."
+    family: customer
+    type: ratio
+    source: mart_customer_360
+    numerator: "COUNT(DISTINCT CASE WHEN ordered_m1 THEN customer_id END)"
+    denominator: "NULLIF(COUNT(DISTINCT customer_id), 0)"
+    grain: [cohort_month]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+
+  repeat_rate:
+    label: "Repeat Rate"
+    description: "Share of active customers with more than one order in the period."
+    family: customer
+    type: ratio
+    source: mart_customer_360
+    numerator: "COUNT(DISTINCT CASE WHEN orders_90d > 1 THEN customer_id END)"
+    denominator: "NULLIF(COUNT(DISTINCT customer_id), 0)"
+    grain: [store, customer_segment]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+
+  discount_dependency_index:
+    label: "Discount Dependency Index"
+    description: >
+      Share of a customer's trailing-90-day orders containing a promotional item.
+      High-DDI cohorts show strong GMV and weak contribution - this is the metric
+      that separates habit from subsidy addiction.
+    family: customer
+    type: ratio
+    source: mart_customer_360
+    numerator: "SUM(promo_orders_90d)"
+    denominator: "NULLIF(SUM(orders_90d), 0)"
+    grain: [customer_segment, cohort_month]
+    format: percent_1dp
+    direction: down_is_good
+    tests:
+      - between: [0.0, 1.0]
+
+  contribution_per_customer:
+    label: "Contribution per Customer (90d)"
+    description: >
+      Gross margin less delivery cost and promotional subsidy, per active
+      customer. The number that reveals whether discount-driven GMV is
+      profitable at all.
+    family: customer
+    type: ratio
+    source: mart_customer_360
+    numerator: "SUM(gross_margin_90d - delivery_cost_90d - subsidy_90d)"
+    denominator: "NULLIF(COUNT(DISTINCT customer_id), 0)"
+    grain: [store, customer_segment, ddi_band]
+    format: inr
+    tests:
+      - between: [-2000, 20000]
+
+# -----------------------------------------------------------------------------
+# DATA QUALITY  -  problem P8
+# -----------------------------------------------------------------------------
+
+  dq_test_pass_rate:
+    label: "Data Quality Test Pass Rate"
+    description: "Share of dbt and Soda checks passing on the latest run."
+    family: data_quality
+    type: ratio
+    source: dq_test_results
+    numerator: "SUM(CASE WHEN status = 'pass' THEN 1 ELSE 0 END)"
+    denominator: "COUNT(*)"
+    grain: [date_day, test_severity]
+    format: percent_1dp
+    tests:
+      - between: [0.0, 1.0]
+
+  freshness_sla_breaches:
+    label: "Freshness SLA Breaches"
+    description: "Count of sources whose latest event is older than their declared SLA."
+    family: data_quality
+    type: measure
+    source: dq_test_results
+    expression: "SUM(CASE WHEN check_type = 'freshness' AND status = 'fail' THEN 1 ELSE 0 END)"
+    grain: [date_day, source_name]
+    format: number_0dp
+    direction: down_is_good
