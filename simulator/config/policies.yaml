@@ -33,16 +33,25 @@ baseline:
   replenishment:
     # how often the store can place an order
     review_period_days: 1
-    # demand estimate: a flat trailing mean. Seven days averages the weekly
-    # cycle away rather than modelling it, which is the point.
+    # demand estimate: a flat trailing mean over the days the SKU was
+    # available. Excluding stockout days is the crude lost-sales correction
+    # most replenishment systems apply, and without it every stockout lowers
+    # the estimate that caused it. Seven days averages the weekly cycle away
+    # rather than modelling it, which is the point.
     trailing_window_days: 7
-    # one lead time for every supplier, when the real ones run 0.5 to 3.2 days
-    # with very different variance
-    assumed_lead_time_days: 2.0
+    # One lead time for every supplier, when the real ones run 0.5 to 3.2 days
+    # with very different variance. Set near the volume-weighted average, which
+    # is where a planner would put it - and which is therefore wrong in both
+    # directions at once: far too long for dairy and bakery, so short-life stock
+    # is over-ordered and written off, and still too short for the erratic
+    # ambient supplier, so the fastest-moving SKUs run out.
+    assumed_lead_time_days: 2.5
     # safety stock as a flat number of days, not derived from demand variance
-    safety_days: 1.5
-    min_order_qty: 6
-    order_multiple: 6
+    safety_days: 2.0
+    # replenished from a city dark-warehouse in small quantities, not
+    # pallets from a distributor
+    min_order_qty: 3
+    order_multiple: 3
     # no shelf-life cap: a 3-day milk gets the same cover rule as a 540-day
     # masala. One of the largest sources of avoidable wastage.
     max_days_of_cover: null

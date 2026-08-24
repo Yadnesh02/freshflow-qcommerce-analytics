@@ -199,6 +199,22 @@ class InventoryLedger:
                 out[si, ki] = q[0][0] - date_ord
         return out
 
+    def weighted_dte_matrix(self, date_ord: int, empty: int = 9999) -> np.ndarray:
+        """Stock-weighted mean days to expiry per cell.
+
+        Distinct from min_dte on purpose. A flat markdown ladder keys on the
+        *soonest* expiry, because the store marks the whole facing down when
+        anything behind it is going off. But customer freshness aversion has to
+        key on the average, or a single near-expiry unit sitting behind fifty
+        fresh ones would suppress demand for all fifty.
+        """
+        out = np.full((self.n_stores, self.n_skus), empty, dtype=np.float64)
+        for (si, ki), q in self._queues.items():
+            units = sum(e[3] for e in q)
+            if units > 0:
+                out[si, ki] = sum((e[0] - date_ord) * e[3] for e in q) / units
+        return out
+
     def reconcile(self) -> np.ndarray:
         """On-hand rebuilt from the queues, for comparison against the counters."""
         rebuilt = np.zeros_like(self._on_hand)
