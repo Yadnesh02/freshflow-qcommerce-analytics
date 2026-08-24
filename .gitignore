@@ -1,0 +1,50 @@
+# ---- data (regenerate with `python tasks.py simulate`) ----
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+# the deployment slice IS committed - it is what Streamlit Cloud reads
+!serving/demo/freshflow_demo.duckdb
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# ---- dbt ----
+transform/target/
+transform/dbt_packages/
+transform/logs/
+logs/
+.user.yml
+
+# ---- dagster ----
+.dagster/
+dagster_home/
+tmp*/
+
+# ---- secrets / local config ----
+.env
+.env.*
+profiles.yml
+!transform/profiles.example.yml
+
+# ---- editors / os ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp
+
+# ---- scratch ----
+scratch/
+notebooks/scratch/
+*.log

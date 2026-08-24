@@ -1,0 +1,19 @@
+# Normalise line endings: the repo stores LF, Windows checkouts get CRLF.
+# Without this, CI on ubuntu sees every file as modified.
+* text=auto eol=lf
+
+*.py    text eol=lf
+*.sql   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+
+*.ps1   text eol=crlf
+
+*.pdf      binary
+*.duckdb   binary
+*.parquet  binary
+*.png      binary
+*.jpg      binary

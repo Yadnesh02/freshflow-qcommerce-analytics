@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_SYSTEM_PYTHON: 0
+
+jobs:
+  quality:
+    name: lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Tests
+        run: uv run pytest --cov=analytics --cov=semantic --cov=simulator --cov-report=term-missing
+
+      # dbt runs on a small generated slice so CI stays under a minute.
+      # Skipped until the simulator and models land (S1.7 / S2.1).
+      - name: Check for dbt models
+        id: dbt_check
+        run: |
+          if [ -n "$(find transform/models -name '*.sql' 2>/dev/null)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No dbt models yet - skipping dbt build (task S2.1)"
+          fi
+
+      - name: Generate CI dataset
+        if: steps.dbt_check.outputs.present == 'true'
+        run: uv run python tasks.py simulate --days 30 --seed 1
+
+      - name: dbt build
+        if: steps.dbt_check.outputs.present == 'true'
+        working-directory: transform
+        run: uv run dbt build --target ci
+
+      - name: Lint SQL (sqlfluff)
+        if: steps.dbt_check.outputs.present == 'true'
+        working-directory: transform
+        run: uv run sqlfluff lint models
