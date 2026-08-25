@@ -151,7 +151,7 @@ def test_the_movement_ledger_reconciles_to_the_stock_counters() -> None:
     from collections import defaultdict
 
     per_batch = defaultdict(int)
-    for _kind, row, delta, _ord in led.movements:
+    for _kind, row, delta, _ord, _seq in led.movements:
         per_batch[row] += delta
     assert all(v >= 0 for v in per_batch.values()), "a batch was over-consumed"
 

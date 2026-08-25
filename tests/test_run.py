@@ -39,7 +39,7 @@ def run(tmp_path_factory):
 
 
 def read(out, source: str) -> pd.DataFrame:
-    files = sorted(out.glob(f"{source}/dt=*/part-0.parquet"))
+    files = sorted(out.glob(f"{source}/dt=*/*.parquet"))
     if not files:
         return pd.DataFrame()
     return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
@@ -165,7 +165,7 @@ def test_orders_only_reference_dates_inside_their_own_partition(run) -> None:
     _, _, out = run
     for path in sorted((out / "pos_orders").iterdir()):
         day = dt.date.fromisoformat(path.name.removeprefix("dt="))
-        frame = pd.read_parquet(path / "part-0.parquet")
+        frame = pd.read_parquet(next(path.glob("*.parquet")))
         assert (frame["order_ts"].dt.date == day).all()
 
 

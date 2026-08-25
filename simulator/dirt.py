@@ -72,7 +72,7 @@ class DirtInjector:
 
     # ------------------------------------------------------------------ io
     def _partitions(self, source: str) -> list[Path]:
-        return sorted((self.raw_dir / source).glob("dt=*/part-0.parquet"))
+        return sorted((self.raw_dir / source).glob("dt=*/*.parquet"))
 
     @staticmethod
     def _day_of(path: Path) -> dt.date:

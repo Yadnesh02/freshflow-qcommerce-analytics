@@ -39,6 +39,10 @@ from simulator.config_loader import SimConfig
 
 # movement event types, matching fct_inventory_movement in the ERD
 INBOUND = "inbound"
+# an opening balance is not a delivery: it is the stock already on the shelf
+# when the window opens. It needs its own type so the ledger reconciles
+# without pretending a year-one migration was a purchase order.
+OPENING_BALANCE = "opening_balance"
 SALE = "sale"
 EXPIRY_WRITEOFF = "expiry_writeoff"
 TRANSFER_IN = "transfer_in"
@@ -73,6 +77,10 @@ class InventoryLedger:
         self._queues: dict[tuple[int, int], list[list[int]]] = {}
         self._on_hand = np.zeros((self.n_stores, self.n_skus), dtype=np.int64)
         self._seq = 0
+        # A monotonic sequence on every movement. Without it an event log
+        # cannot be replayed: 100+ sales can share a batch and a date, and
+        # SUM(qty_delta) OVER (ORDER BY event_date) is then non-deterministic.
+        self._move_seq = 0
         self.movements: list[tuple] = []
         # batch attributes, appended as batches are received
         self._batch_expiry: list[int] = []
@@ -90,6 +98,7 @@ class InventoryLedger:
         shelf_life: np.ndarray,
         unit_cost: np.ndarray,
         date_ord: int,
+        event_type: str = INBOUND,
     ) -> np.ndarray:
         """Add batches to stock. Returns the ledger's row index for each batch."""
         start = len(self._batch_expiry)
@@ -115,7 +124,8 @@ class InventoryLedger:
                 self._queues.setdefault(cell, []), [int(expiry_ord[i]), self._seq, row, units]
             )
             self._on_hand[cell] += units
-            self.movements.append((INBOUND, row, units, date_ord))
+            self._move_seq += 1
+            self.movements.append((event_type, row, units, date_ord, self._move_seq))
 
         return rows
 
@@ -140,7 +150,8 @@ class InventoryLedger:
             dte = self._batch_expiry[row] - date_ord
             shelf = self._batch_shelf_life[row]
             out.append(Allocation(row, take, dte, dte / shelf if shelf else 0.0))
-            self.movements.append((SALE, row, -take, date_ord))
+            self._move_seq += 1
+            self.movements.append((SALE, row, -take, date_ord, self._move_seq))
 
             if entry[3] == 0:
                 q.pop(0)
@@ -161,7 +172,10 @@ class InventoryLedger:
                 units = entry[3]
                 if units > 0:
                     self._on_hand[cell] -= units
-                    self.movements.append((EXPIRY_WRITEOFF, entry[2], -units, date_ord))
+                    self._move_seq += 1
+                    self.movements.append(
+                        (EXPIRY_WRITEOFF, entry[2], -units, date_ord, self._move_seq)
+                    )
                     written.append((entry[2], units))
             if not q:
                 empty_cells.append(cell)
@@ -324,9 +338,10 @@ def to_movement_frame(
                 }.items()
             }
         )
-    kinds, rows, deltas, ords = zip(*movements, strict=True)
+    kinds, rows, deltas, ords, seqs = zip(*movements, strict=True)
     return pd.DataFrame(
         {
+            "movement_seq": list(seqs),
             "batch_id": [batch_ids[r] for r in rows],
             "event_type": list(kinds),
             "qty_delta": list(deltas),

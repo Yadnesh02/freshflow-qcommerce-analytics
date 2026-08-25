@@ -20,14 +20,14 @@ feeds, how you notice, and what the pipeline does about it.
 | 5 | Returns encoded two different ways | `pos_order_items`, `pos_returns` |
 | 6 | Clickstream in UTC, POS in IST | `clickstream` |
 | 7 | SKU identifier format changes on 2026-03-01 | `clickstream` |
-| 8 | Clickstream outage (2026-03-01, 2026-03-02) | `clickstream` |
+| 8 | Clickstream outage (2025-10-20, 2025-10-21) | `clickstream` |
 
 ---
 
 ## 1. Duplicate order events (retried webhook)
 
 - **Feeds** — `pos_orders`, `pos_order_items`
-- **Rows affected** — 22,870
+- **Rows affected** — 22,878
 
 **Symptom.** Exact duplicate rows. Revenue and units overstated by ~0.4%.
 
@@ -36,7 +36,7 @@ feeds, how you notice, and what the pipeline does about it.
 ## 2. Late-arriving orders (up to 48h)
 
 - **Feeds** — `pos_orders`
-- **Rows affected** — 23,253
+- **Rows affected** — 23,232
 
 **Symptom.** An order's timestamp is up to two days before the partition it arrived in. A daily incremental keyed on the partition silently drops them.
 
@@ -45,7 +45,7 @@ feeds, how you notice, and what the pipeline does about it.
 ## 3. Inventory movements with no batch reference
 
 - **Feeds** — `wms_inventory_movement`
-- **Rows affected** — 48,845
+- **Rows affected** — 49,056
 
 **Symptom.** batch_id is null, so the movement cannot be attributed to an expiry date and the stock reconciliation will not balance.
 
@@ -63,7 +63,7 @@ feeds, how you notice, and what the pipeline does about it.
 ## 5. Returns encoded two different ways
 
 - **Feeds** — `pos_order_items`, `pos_returns`
-- **Rows affected** — 10,470
+- **Rows affected** — 10,474
 
 **Symptom.** Some returns are negative quantities inside the sales feed; others are positive rows in a separate feed. Counting either alone gets net units wrong, and counting both naively double-counts.
 
@@ -72,7 +72,7 @@ feeds, how you notice, and what the pipeline does about it.
 ## 6. Clickstream in UTC, POS in IST
 
 - **Feeds** — `clickstream`
-- **Rows affected** — 3,082,041
+- **Rows affected** — 3,088,103
 
 **Symptom.** Clickstream timestamps are 5h30m behind the orders they relate to. Joining on date misattributes every event before 05:30 IST to the previous day, and the evening demand peak lands in the afternoon.
 
@@ -81,16 +81,16 @@ feeds, how you notice, and what the pipeline does about it.
 ## 7. SKU identifier format changes on 2026-03-01
 
 - **Feeds** — `clickstream`
-- **Rows affected** — 1,677,678
+- **Rows affected** — 1,686,581
 
 **Symptom.** SKU-00042 becomes SKU_42 partway through the year, so an inner join to the product dimension silently loses every clickstream event after that date.
 
 **Fix.** Normalise the identifier in staging and assert referential integrity against dim_product. A relationships test fails loudly where a silent inner join would not.
 
-## 8. Clickstream outage (2026-03-01, 2026-03-02)
+## 8. Clickstream outage (2025-10-20, 2025-10-21)
 
 - **Feeds** — `clickstream`
-- **Rows affected** — 25,603
+- **Rows affected** — 22,497
 
 **Symptom.** Two partitions are missing entirely, and because collectors fail under load they are two of the busiest days of the year. Any metric averaging over that window is biased downward, and the censored-demand signal is absent exactly where stockouts were worst.
 

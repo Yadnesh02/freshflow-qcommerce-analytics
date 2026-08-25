@@ -110,7 +110,7 @@ erDiagram
     fct_order_item {
         string  order_id PK "FK"
         string  sku_id PK "FK"
-        string  batch_id FK "FEFO-allocated - the keystone"
+        string  batch_id PK "FK - FEFO-allocated, the keystone"
         string  store_id FK "denormalised for slicing"
         date    date_day FK
         string  promo_id FK
@@ -194,7 +194,8 @@ erDiagram
     }
 
     fct_inventory_movement {
-        string    movement_id PK
+        bigint    movement_seq PK "monotonic - an event log needs a replay order"
+        string    movement_id
         string    batch_id FK
         string    event_type "inbound|sale|transfer_in|transfer_out|damage|expiry_writeoff|cycle_count_adj"
         int       qty_delta
@@ -459,7 +460,7 @@ erDiagram
 | `dim_promotion` | gold | promo | Type and, critically, who funds it |
 | `dim_supplier` | gold | supplier | Lead time and inbound freshness variance |
 | `fct_order` | gold | order | ~1.6M orders |
-| `fct_order_item` | gold | order × SKU | ~5.5M lines, each with a FEFO batch |
+| `fct_order_item` | gold | order × SKU × batch | ~4.2M lines. Batch is part of the key: FEFO can split one line across two batches, which is exactly why it is there. |
 | `fct_clickstream` | gold | event | Demand signal during stockouts |
 | `fct_inventory_batch` | gold | batch | ~700k batches with expiry dates |
 | `fct_inventory_movement` | gold | movement | The auditable inventory ledger |

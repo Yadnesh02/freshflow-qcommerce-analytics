@@ -176,6 +176,11 @@ def t_demo_slice(_: argparse.Namespace) -> int:
     return code
 
 
+def t_gate(_: argparse.Namespace) -> int:
+    """Run checkpoint gate G1 against the emitted raw layer."""
+    return py("-m", "simulator.verify")
+
+
 def t_api(args: argparse.Namespace) -> int:
     """Serve the metrics API locally."""
     return run(
@@ -256,6 +261,7 @@ TARGETS = {
     "simulate": t_simulate,
     "build": t_build,
     "test": t_test,
+    "gate": t_gate,
     "lint": t_lint,
     "forecast": t_forecast,
     "recommend": t_recommend,

@@ -41,6 +41,7 @@ from simulator.customers import BasketAssembler, CustomerBase
 from simulator.demand import DemandModel, freshness_multiplier, price_multiplier
 from simulator.fefo import (
     LOW_DTE_FRACTION,
+    OPENING_BALANCE,
     Fulfiller,
     InventoryLedger,
     to_movement_frame,
@@ -200,12 +201,46 @@ class SimulationRun:
             self.shelf_life[ki],
             self.landed_cost[ki],
             ord_,
+            event_type=OPENING_BALANCE,
         )
-        self._batch_ids.extend(f"BAT-OPEN-{i:08d}" for i in range(len(si)))
+        batch_ids = [f"BAT-OPEN-{i:08d}" for i in range(len(si))]
+        self._batch_ids.extend(batch_ids)
+
+        # Emit it as a real batch feed. Without this, 15k batches appear on
+        # order lines while existing in no source table at all, and the
+        # warehouse reconciliation in Sprint 2 could never balance.
+        expiry = [dt.date.fromordinal(ord_ + int(u)) for u in usable]
+        self._write(
+            "wms_inventory_batch",
+            day,
+            pd.DataFrame(
+                {
+                    "batch_id": batch_ids,
+                    "sku_id": self.sku_ids[ki],
+                    "store_id": self.store_ids[si],
+                    "supplier_id": "SUP-OPENING",
+                    "po_id": None,
+                    "mfg_date": [
+                        e - dt.timedelta(days=int(sl))
+                        for e, sl in zip(expiry, self.shelf_life[ki], strict=True)
+                    ],
+                    "expiry_date": expiry,
+                    "received_date": day,
+                    "qty_received": qty[si, ki],
+                    "unit_landed_cost": np.round(self.landed_cost[ki], 2),
+                    "usable_days": usable,
+                }
+            ),
+        )
+        self._write(
+            "wms_inventory_movement",
+            day,
+            to_movement_frame(self.ledger.drain_movements(), self._batch_ids),
+        )
+
         # and give the policy a plausible sales history, so it does not treat
         # every SKU in the catalogue as brand new
         self._sales_history[:] = expected[None, :, :]
-        self.ledger.drain_movements()
         self._log(f"opening stock: {qty.sum():,} units across {len(si):,} store-SKU cells")
 
     # ------------------------------------------------------------------ output
@@ -214,7 +249,11 @@ class SimulationRun:
             return
         path = self.out_dir / source / f"dt={day.isoformat()}"
         path.mkdir(parents=True, exist_ok=True)
-        frame.to_parquet(path / "part-0.parquet", index=False)
+        # numbered parts, because a partition can legitimately be written more
+        # than once in a day - the opening balance and day one's trading both
+        # land in the first partition. Overwriting part-0 silently lost one.
+        part = len(list(path.glob("part-*.parquet")))
+        frame.to_parquet(path / f"part-{part}.parquet", index=False)
         self._counts[source] += len(frame)
 
     def _log(self, msg: str) -> None:
@@ -335,6 +374,18 @@ class SimulationRun:
             if orders.empty:
                 continue
 
+            # Fulfil in the order customers actually placed. The assembler
+            # groups baskets by segment and stamps each with an hour drawn from
+            # the intraday curve, so assembly order and clock order differ - and
+            # consuming stock out of clock order makes the emitted feed
+            # contradict itself: a 06:00 sale could take a later-expiring batch
+            # because a 20:00 sale had already drained the earlier one.
+            orders = orders.sort_values("order_ts", kind="stable").reset_index(drop=True)
+            sequence = {oid: i for i, oid in enumerate(orders["order_id"])}
+            items = items.assign(_seq=items["order_id"].map(sequence)).sort_values(
+                "_seq", kind="stable"
+            )
+
             hour_of = dict(zip(orders["order_id"], orders["order_ts"], strict=True))
             cust_of = dict(zip(orders["order_id"], orders["customer_row"], strict=True))
             lines, first_out = [], {}
@@ -382,6 +433,10 @@ class SimulationRun:
 
             if not lines:
                 continue
+            # Substitution allocates one unit at a time, so two units landing on
+            # the same alternative SKU produced two identical rows. That is the
+            # wrong grain - and worse, indistinguishable from the duplicate
+            # defect injected in S1.8. Collapse to one line per batch.
             item_df = pd.DataFrame(
                 lines,
                 columns=[
@@ -397,6 +452,18 @@ class SimulationRun:
                     "promo_id",
                     "is_substitution",
                 ],
+            )
+            item_df = item_df.groupby(
+                ["order_id", "sku_id", "batch_id"], as_index=False, sort=False
+            ).agg(
+                qty=("qty", "sum"),
+                unit_base_price=("unit_base_price", "first"),
+                unit_realized_price=("unit_realized_price", "first"),
+                discount_amt=("discount_amt", "first"),
+                unit_cogs=("unit_cogs", "first"),
+                dte_at_sale=("dte_at_sale", "min"),
+                promo_id=("promo_id", "first"),
+                is_substitution=("is_substitution", "max"),
             )
             sold_per_sku = (
                 item_df.assign(_i=item_df["sku_id"].map({s: i for i, s in enumerate(self.sku_ids)}))

@@ -33,7 +33,7 @@ MIGRATION = dt.date(2025, 9, 15)
 
 
 def _read(root, source: str) -> pd.DataFrame:
-    files = sorted(root.glob(f"{source}/dt=*/part-0.parquet"))
+    files = sorted(root.glob(f"{source}/dt=*/*.parquet"))
     return (
         pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
         if files
@@ -129,7 +129,7 @@ def test_duplicates_are_exact_copies_so_a_row_hash_removes_them(worlds) -> None:
 def test_some_orders_land_in_a_later_partition_than_they_happened(worlds) -> None:
     _, dirty, _ = worlds
     late = 0
-    for path in sorted((dirty / "pos_orders").glob("dt=*/part-0.parquet")):
+    for path in sorted((dirty / "pos_orders").glob("dt=*/*.parquet")):
         day = dt.date.fromisoformat(path.parent.name.removeprefix("dt="))
         frame = pd.read_parquet(path)
         late += int((frame["order_ts"].dt.date < day).sum())
@@ -139,7 +139,7 @@ def test_some_orders_land_in_a_later_partition_than_they_happened(worlds) -> Non
 def test_late_arrivals_stay_within_the_documented_lookback(worlds) -> None:
     """The 48h window is what the incremental model will be built against."""
     _, dirty, _ = worlds
-    for path in sorted((dirty / "pos_orders").glob("dt=*/part-0.parquet")):
+    for path in sorted((dirty / "pos_orders").glob("dt=*/*.parquet")):
         day = dt.date.fromisoformat(path.parent.name.removeprefix("dt="))
         frame = pd.read_parquet(path)
         lag = (pd.Timestamp(day) - frame["order_ts"].dt.normalize()).dt.days
@@ -228,7 +228,7 @@ def test_some_events_now_carry_the_wrong_date_for_their_partition(worlds) -> Non
     """Anything before 05:30 IST rolls back a day. This is where the bug is noticed."""
     _, dirty, _ = worlds
     mismatched = 0
-    for path in sorted((dirty / "clickstream").glob("dt=*/part-0.parquet")):
+    for path in sorted((dirty / "clickstream").glob("dt=*/*.parquet")):
         day = dt.date.fromisoformat(path.parent.name.removeprefix("dt="))
         frame = pd.read_parquet(path)
         mismatched += int((pd.to_datetime(frame["event_date"]).dt.date != day).sum())
@@ -239,7 +239,7 @@ def test_some_events_now_carry_the_wrong_date_for_their_partition(worlds) -> Non
 def test_the_sku_identifier_format_changes_partway_through(worlds) -> None:
     _, dirty, _ = worlds
     before, after = [], []
-    for path in sorted((dirty / "clickstream").glob("dt=*/part-0.parquet")):
+    for path in sorted((dirty / "clickstream").glob("dt=*/*.parquet")):
         day = dt.date.fromisoformat(path.parent.name.removeprefix("dt="))
         frame = pd.read_parquet(path)
         (after if day >= MIGRATION else before).append(frame["sku_id"])
@@ -277,7 +277,7 @@ def test_the_outage_lands_on_a_busy_day(worlds) -> None:
     present = {p.name for p in (dirty / "clickstream").glob("dt=*")}
     # rows, not bytes: other defects rewrite these files and change their size
     rows = {
-        p.name: len(pd.read_parquet(p / "part-0.parquet"))
+        p.name: len(pd.read_parquet(next(p.glob("*.parquet"))))
         for p in (clean / "clickstream").glob("dt=*")
     }
     missing = [n for n in rows if n not in present]
