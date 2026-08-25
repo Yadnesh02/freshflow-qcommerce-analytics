@@ -1,0 +1,204 @@
+<title>FreshFlow Data Profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground:#f4f6f4; --card:#fdfdfc; --ink:#0d1211; --ink-2:#55605c; --muted:#8a938f;
+  --grid:#e3e7e3; --axis:#c5cdc8; --rule:rgba(13,18,17,.10); --accent:#0f8a5f;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --neg:#e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0e1110; --card:#181c1b; --ink:#f1f4f2; --ink-2:#b6c0bb; --muted:#8a938f;
+    --grid:#262c2a; --axis:#39413e; --rule:rgba(255,255,255,.10); --accent:#22b988;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --neg:#e66767;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0e1110; --card:#181c1b; --ink:#f1f4f2; --ink-2:#b6c0bb; --muted:#8a938f;
+  --grid:#262c2a; --axis:#39413e; --rule:rgba(255,255,255,.10); --accent:#22b988;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --neg:#e66767;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--ground); color:var(--ink); font-size:15px; line-height:1.55;
+  font-family:Archivo,system-ui,-apple-system,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+.wrap { max-width:1120px; margin:0 auto; padding:44px 24px 72px; }
+.eyebrow { font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); font-weight:500; }
+h1 { font-size:clamp(28px,4vw,40px); line-height:1.08; margin:10px 0 12px; font-weight:700;
+  letter-spacing:-.02em; text-wrap:balance; }
+.lede { color:var(--ink-2); max-width:66ch; font-size:16.5px; margin:0; }
+.note { margin-top:18px; padding:12px 16px; border-left:3px solid var(--accent);
+  background:var(--card); color:var(--ink-2); font-size:14px; max-width:76ch; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
+  background:var(--rule); border:1px solid var(--rule); margin:32px 0 8px; }
+.stat { background:var(--card); padding:16px 18px; }
+.stat .k { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); }
+.stat .v { font-size:25px; font-weight:600; letter-spacing:-.02em; margin-top:5px;
+  font-variant-numeric:tabular-nums; }
+.stat .s { font-size:12.5px; color:var(--ink-2); margin-top:2px; }
+section { margin-top:46px; }
+h2 { font-size:19px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em; }
+.sub { color:var(--ink-2); font-size:14px; margin:0 0 16px; max-width:78ch; }
+.card { background:var(--card); border:1px solid var(--rule); padding:18px 20px 14px; }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:20px; }
+.scroll { overflow-x:auto; }
+.chart { display:block; width:100%; height:auto; min-width:340px; }
+.grid { stroke:var(--grid); stroke-width:1; }
+.axis { stroke:var(--axis); stroke-width:1; }
+.tick { font-family:"IBM Plex Mono",monospace; font-size:10px; fill:var(--muted); text-anchor:middle; }
+.ay { text-anchor:end; }
+.line { fill:none; stroke-width:2; stroke-linejoin:round; }
+.area { stroke:none; opacity:.13; }
+.s1 { stroke:var(--s1); } .area.s1 { fill:var(--s1); }
+.bar.s1 { fill:var(--s1); } .bar.s2 { fill:var(--s2); } .bar.s3 { fill:var(--s3); }
+.bar.neg { fill:var(--neg); }
+.rowlab { font-size:12.5px; fill:var(--ink-2); text-anchor:end; }
+.rowval { font-family:"IBM Plex Mono",monospace; font-size:11px; fill:var(--muted); }
+.wlab { font-size:11.5px; fill:var(--ink-2); text-anchor:middle; }
+.wval { font-family:"IBM Plex Mono",monospace; font-size:11px; fill:var(--ink); text-anchor:middle; }
+table { border-collapse:collapse; width:100%; font-size:13px; margin-top:4px; }
+th,td { text-align:left; padding:7px 12px 7px 0; border-bottom:1px solid var(--rule);
+  font-variant-numeric:tabular-nums; }
+th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+td.num { text-align:right; } td.bad { color:var(--neg); font-weight:600; }
+.finding { margin-top:12px; padding:11px 15px; background:var(--card);
+  border-left:3px solid var(--s2); font-size:13.5px; color:var(--ink-2); }
+.finding b { color:var(--ink); }
+footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--rule);
+  color:var(--muted); font-size:12.5px; }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">FreshFlow &nbsp;·&nbsp; Sprint 1 complete &nbsp;·&nbsp; Gate G1 passed</div>
+  <h1>A year of the network, and the problem inside it</h1>
+  <p class="lede">The simulator now produces 365 days across 14 Mumbai dark
+  stores and 1,500 SKUs — 1,560,709 orders, 4,248,629 order lines, every one
+  allocated to a physical batch with a real expiry date. This is what came out, and what it says
+  about how much is being left on the table.</p>
+
+  <div class="note"><b>Figures are cleaned, not raw.</b> Duplicate events are deduplicated and
+  returns excluded, exactly as the staging layer will do in Sprint 2. Leaving the injected defects
+  in would overstate revenue by about half a percent and make every number here subtly wrong.</div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Revenue</div><div class="v">₹43.54 Cr</div>
+      <div class="s">4,281,617 units</div></div>
+    <div class="stat"><div class="k">Gross margin</div><div class="v">24.4%</div>
+      <div class="s">₹10.62 Cr</div></div>
+    <div class="stat"><div class="k">GM after wastage</div><div class="v">22.6%</div>
+      <div class="s">the north star</div></div>
+    <div class="stat"><div class="k">Wastage</div><div class="v">₹78.9 L</div>
+      <div class="s">151,172 units, 1.8% of revenue</div></div>
+    <div class="stat"><div class="k">Substituted</div><div class="v">385,343</div>
+      <div class="s">units bought as second choice</div></div>
+    <div class="stat"><div class="k">Batches</div><div class="v">654,657</div>
+      <div class="s">4,924,292 movements</div></div>
+  </div>
+
+  <section>
+    <h2>The year, in units sold</h2>
+    <p class="sub">Daily units across the network. Festival peaks, the monsoon lift and the
+    month-end trough are all visible — but so is the ceiling the baseline policy keeps hitting.</p>
+    <div class="card"><div class="scroll"><svg viewBox="0 0 1000 260" class="chart" role="img"
+      aria-label="Units sold per day across the simulated year">
+      <line class="grid" x1="56" y1="195.1" x2="984" y2="195.1"/><text class="tick ay" x="48" y="198.6">5k</text><line class="grid" x1="56" y1="160.3" x2="984" y2="160.3"/><text class="tick ay" x="48" y="163.8">10k</text><line class="grid" x1="56" y1="125.4" x2="984" y2="125.4"/><text class="tick ay" x="48" y="128.9">15k</text><line class="grid" x1="56" y1="90.5" x2="984" y2="90.5"/><text class="tick ay" x="48" y="94.0">20k</text><line class="grid" x1="56" y1="55.6" x2="984" y2="55.6"/><text class="tick ay" x="48" y="59.1">25k</text><line class="grid" x1="56" y1="20.8" x2="984" y2="20.8"/><text class="tick ay" x="48" y="24.3">30k</text>
+      <path class="area s1" d="M56.0 74.8 L58.5 93.3 L61.1 93.4 L63.6 95.2 L66.2 66.7 L68.7 39.1 L71.3 105.1 L73.8 150.2 L76.4 151.5 L78.9 150.0 L81.5 144.5 L84.0 133.2 L86.6 115.2 L89.1 123.8 L91.7 155.4 L94.2 156.1 L96.8 151.5 L99.3 147.7 L101.9 137.7 L104.4 91.2 L107.0 94.8 L109.5 126.4 L112.1 126.3 L114.6 122.8 L117.2 130.9 L119.7 117.0 L122.3 93.5 L124.8 97.6 L127.4 140.8 L129.9 140.7 L132.5 144.8 L135.0 137.5 L137.6 144.0 L140.1 127.4 L142.7 132.1 L145.2 159.9 L147.8 160.1 L150.3 169.9 L152.9 166.2 L155.4 156.4 L158.0 143.1 L160.5 145.3 L163.1 139.8 L165.6 137.6 L168.2 131.4 L170.7 123.7 L173.3 100.5 L175.8 75.6 L178.4 76.6 L180.9 111.3 L183.5 109.7 L186.0 103.6 L188.6 97.1 L191.1 79.3 L193.7 155.5 L196.2 157.5 L198.8 177.9 L201.3 179.6 L203.9 177.6 L206.4 173.6 L209.0 166.6 L211.5 129.3 L214.1 135.9 L216.6 161.2 L219.2 163.3 L221.7 159.8 L224.3 154.3 L226.8 145.8 L229.4 143.8 L231.9 148.8 L234.5 171.3 L237.0 172.1 L239.6 169.1 L242.1 167.8 L244.7 159.5 L247.2 143.2 L249.8 147.7 L252.3 171.0 L254.9 171.9 L257.4 171.5 L260.0 167.7 L262.5 159.0 L265.1 146.4 L267.6 150.8 L270.2 171.5 L272.7 180.0 L275.3 178.6 L277.8 175.2 L280.4 169.1 L282.9 157.2 L285.5 157.8 L288.0 161.6 L290.5 162.9 L293.1 160.7 L295.6 155.9 L298.2 144.3 L300.7 127.6 L303.3 138.7 L305.8 174.0 L308.4 175.1 L310.9 171.5 L313.5 167.1 L316.0 160.5 L318.6 145.0 L321.1 150.5 L323.7 171.5 L326.2 174.3 L328.8 169.9 L331.3 168.2 L333.9 160.7 L336.4 147.5 L339.0 150.1 L341.5 163.6 L344.1 162.5 L346.6 156.8 L349.2 162.1 L351.7 151.9 L354.3 157.4 L356.8 160.9 L359.4 180.2 L361.9 163.4 L364.5 155.2 L367.0 117.1 L369.6 107.5 L372.1 136.5 L374.7 141.1 L377.2 164.6 L379.8 164.9 L382.3 160.9 L384.9 169.7 L387.4 160.5 L390.0 147.7 L392.5 149.3 L395.1 164.7 L397.6 163.0 L400.2 157.5 L402.7 154.5 L405.3 160.8 L407.8 144.7 L410.4 149.6 L412.9 171.9 L415.5 172.3 L418.0 169.4 L420.6 167.1 L423.1 159.7 L425.7 145.4 L428.2 159.3 L430.8 179.0 L433.3 180.1 L435.9 177.8 L438.4 175.4 L441.0 167.9 L443.5 155.2 L446.1 135.1 L448.6 162.4 L451.2 164.7 L453.7 159.8 L456.3 155.5 L458.8 146.0 L461.4 129.8 L463.9 150.1 L466.5 172.4 L469.0 171.4 L471.6 169.9 L474.1 166.4 L476.7 158.5 L479.2 135.1 L481.8 134.7 L484.3 170.7 L486.9 171.4 L489.4 171.1 L492.0 166.1 L494.5 158.2 L497.1 144.9 L499.6 148.0 L502.2 170.3 L504.7 172.5 L507.3 178.3 L509.8 175.8 L512.4 167.1 L514.9 130.7 L517.5 102.0 L520.0 132.8 L522.5 129.4 L525.1 122.3 L527.6 157.2 L530.2 145.6 L532.7 127.8 L535.3 147.9 L537.8 170.9 L540.4 171.0 L542.9 168.3 L545.5 165.2 L548.0 156.7 L550.6 144.8 L553.1 149.3 L555.7 160.5 L558.2 147.2 L560.8 138.9 L563.3 126.5 L565.9 119.2 L568.4 102.0 L571.0 135.4 L573.5 159.9 L576.1 159.0 L578.6 160.8 L581.2 154.7 L583.7 165.6 L586.3 155.7 L588.8 143.9 L591.4 168.3 L593.9 178.9 L596.5 142.8 L599.0 141.2 L601.6 127.7 L604.1 130.6 L606.7 119.1 L609.2 147.7 L611.8 163.2 L614.3 157.6 L616.9 154.6 L619.4 141.4 L622.0 126.4 L624.5 133.3 L627.1 172.7 L629.6 161.7 L632.2 156.7 L634.7 152.6 L637.3 158.9 L639.8 118.8 L642.4 142.7 L644.9 172.0 L647.5 159.7 L650.0 157.1 L652.6 167.0 L655.1 141.1 L657.7 139.6 L660.2 145.9 L662.8 168.1 L665.3 180.9 L667.9 167.0 L670.4 175.7 L673.0 145.3 L675.5 109.3 L678.1 119.6 L680.6 151.4 L683.2 151.9 L685.7 145.8 L688.3 141.0 L690.8 143.4 L693.4 126.6 L695.9 131.9 L698.5 162.1 L701.0 159.0 L703.6 154.4 L706.1 154.3 L708.7 142.0 L711.2 127.6 L713.8 152.4 L716.3 158.4 L718.9 160.8 L721.4 157.4 L724.0 154.0 L726.5 142.4 L729.1 130.2 L731.6 133.9 L734.2 168.1 L736.7 170.0 L739.3 166.2 L741.8 175.2 L744.4 168.9 L746.9 156.0 L749.5 159.8 L752.0 146.0 L754.5 149.2 L757.1 146.1 L759.6 143.1 L762.2 131.5 L764.7 113.3 L767.3 119.2 L769.8 162.2 L772.4 161.1 L774.9 154.1 L777.5 154.9 L780.0 142.6 L782.6 125.4 L785.1 129.5 L787.7 158.6 L790.2 160.8 L792.8 154.7 L795.3 154.5 L797.9 142.0 L800.4 126.9 L803.0 131.7 L805.5 159.9 L808.1 159.7 L810.6 157.5 L813.2 164.0 L815.7 155.1 L818.3 138.9 L820.8 144.8 L823.4 167.1 L825.9 170.2 L828.5 144.4 L831.0 140.5 L833.6 129.0 L836.1 111.7 L838.7 119.5 L841.2 148.0 L843.8 148.4 L846.3 155.7 L848.9 153.2 L851.4 140.7 L854.0 126.5 L856.5 129.6 L859.1 158.6 L861.6 159.6 L864.2 156.8 L866.7 154.1 L869.3 142.3 L871.8 126.3 L874.4 133.5 L876.9 160.6 L879.5 160.9 L882.0 157.0 L884.6 154.8 L887.1 142.9 L889.7 141.2 L892.2 143.9 L894.8 168.9 L897.3 168.8 L899.9 166.4 L902.4 162.2 L905.0 154.1 L907.5 110.4 L910.1 118.9 L912.6 150.9 L915.2 151.9 L917.7 145.1 L920.3 141.8 L922.8 130.5 L925.4 128.6 L927.9 132.7 L930.5 159.4 L933.0 159.6 L935.6 157.6 L938.1 155.4 L940.7 130.4 L943.2 105.9 L945.8 133.8 L948.3 161.6 L950.9 161.0 L953.4 158.2 L956.0 156.2 L958.5 145.2 L961.1 125.2 L963.6 131.1 L966.2 159.4 L968.7 171.2 L971.3 154.9 L973.8 149.4 L976.4 133.9 L978.9 141.0 L981.5 147.1 L984.0 168.9 L984 230 L56 230 Z"/>
+      <path class="line s1" d="M56.0 74.8 L58.5 93.3 L61.1 93.4 L63.6 95.2 L66.2 66.7 L68.7 39.1 L71.3 105.1 L73.8 150.2 L76.4 151.5 L78.9 150.0 L81.5 144.5 L84.0 133.2 L86.6 115.2 L89.1 123.8 L91.7 155.4 L94.2 156.1 L96.8 151.5 L99.3 147.7 L101.9 137.7 L104.4 91.2 L107.0 94.8 L109.5 126.4 L112.1 126.3 L114.6 122.8 L117.2 130.9 L119.7 117.0 L122.3 93.5 L124.8 97.6 L127.4 140.8 L129.9 140.7 L132.5 144.8 L135.0 137.5 L137.6 144.0 L140.1 127.4 L142.7 132.1 L145.2 159.9 L147.8 160.1 L150.3 169.9 L152.9 166.2 L155.4 156.4 L158.0 143.1 L160.5 145.3 L163.1 139.8 L165.6 137.6 L168.2 131.4 L170.7 123.7 L173.3 100.5 L175.8 75.6 L178.4 76.6 L180.9 111.3 L183.5 109.7 L186.0 103.6 L188.6 97.1 L191.1 79.3 L193.7 155.5 L196.2 157.5 L198.8 177.9 L201.3 179.6 L203.9 177.6 L206.4 173.6 L209.0 166.6 L211.5 129.3 L214.1 135.9 L216.6 161.2 L219.2 163.3 L221.7 159.8 L224.3 154.3 L226.8 145.8 L229.4 143.8 L231.9 148.8 L234.5 171.3 L237.0 172.1 L239.6 169.1 L242.1 167.8 L244.7 159.5 L247.2 143.2 L249.8 147.7 L252.3 171.0 L254.9 171.9 L257.4 171.5 L260.0 167.7 L262.5 159.0 L265.1 146.4 L267.6 150.8 L270.2 171.5 L272.7 180.0 L275.3 178.6 L277.8 175.2 L280.4 169.1 L282.9 157.2 L285.5 157.8 L288.0 161.6 L290.5 162.9 L293.1 160.7 L295.6 155.9 L298.2 144.3 L300.7 127.6 L303.3 138.7 L305.8 174.0 L308.4 175.1 L310.9 171.5 L313.5 167.1 L316.0 160.5 L318.6 145.0 L321.1 150.5 L323.7 171.5 L326.2 174.3 L328.8 169.9 L331.3 168.2 L333.9 160.7 L336.4 147.5 L339.0 150.1 L341.5 163.6 L344.1 162.5 L346.6 156.8 L349.2 162.1 L351.7 151.9 L354.3 157.4 L356.8 160.9 L359.4 180.2 L361.9 163.4 L364.5 155.2 L367.0 117.1 L369.6 107.5 L372.1 136.5 L374.7 141.1 L377.2 164.6 L379.8 164.9 L382.3 160.9 L384.9 169.7 L387.4 160.5 L390.0 147.7 L392.5 149.3 L395.1 164.7 L397.6 163.0 L400.2 157.5 L402.7 154.5 L405.3 160.8 L407.8 144.7 L410.4 149.6 L412.9 171.9 L415.5 172.3 L418.0 169.4 L420.6 167.1 L423.1 159.7 L425.7 145.4 L428.2 159.3 L430.8 179.0 L433.3 180.1 L435.9 177.8 L438.4 175.4 L441.0 167.9 L443.5 155.2 L446.1 135.1 L448.6 162.4 L451.2 164.7 L453.7 159.8 L456.3 155.5 L458.8 146.0 L461.4 129.8 L463.9 150.1 L466.5 172.4 L469.0 171.4 L471.6 169.9 L474.1 166.4 L476.7 158.5 L479.2 135.1 L481.8 134.7 L484.3 170.7 L486.9 171.4 L489.4 171.1 L492.0 166.1 L494.5 158.2 L497.1 144.9 L499.6 148.0 L502.2 170.3 L504.7 172.5 L507.3 178.3 L509.8 175.8 L512.4 167.1 L514.9 130.7 L517.5 102.0 L520.0 132.8 L522.5 129.4 L525.1 122.3 L527.6 157.2 L530.2 145.6 L532.7 127.8 L535.3 147.9 L537.8 170.9 L540.4 171.0 L542.9 168.3 L545.5 165.2 L548.0 156.7 L550.6 144.8 L553.1 149.3 L555.7 160.5 L558.2 147.2 L560.8 138.9 L563.3 126.5 L565.9 119.2 L568.4 102.0 L571.0 135.4 L573.5 159.9 L576.1 159.0 L578.6 160.8 L581.2 154.7 L583.7 165.6 L586.3 155.7 L588.8 143.9 L591.4 168.3 L593.9 178.9 L596.5 142.8 L599.0 141.2 L601.6 127.7 L604.1 130.6 L606.7 119.1 L609.2 147.7 L611.8 163.2 L614.3 157.6 L616.9 154.6 L619.4 141.4 L622.0 126.4 L624.5 133.3 L627.1 172.7 L629.6 161.7 L632.2 156.7 L634.7 152.6 L637.3 158.9 L639.8 118.8 L642.4 142.7 L644.9 172.0 L647.5 159.7 L650.0 157.1 L652.6 167.0 L655.1 141.1 L657.7 139.6 L660.2 145.9 L662.8 168.1 L665.3 180.9 L667.9 167.0 L670.4 175.7 L673.0 145.3 L675.5 109.3 L678.1 119.6 L680.6 151.4 L683.2 151.9 L685.7 145.8 L688.3 141.0 L690.8 143.4 L693.4 126.6 L695.9 131.9 L698.5 162.1 L701.0 159.0 L703.6 154.4 L706.1 154.3 L708.7 142.0 L711.2 127.6 L713.8 152.4 L716.3 158.4 L718.9 160.8 L721.4 157.4 L724.0 154.0 L726.5 142.4 L729.1 130.2 L731.6 133.9 L734.2 168.1 L736.7 170.0 L739.3 166.2 L741.8 175.2 L744.4 168.9 L746.9 156.0 L749.5 159.8 L752.0 146.0 L754.5 149.2 L757.1 146.1 L759.6 143.1 L762.2 131.5 L764.7 113.3 L767.3 119.2 L769.8 162.2 L772.4 161.1 L774.9 154.1 L777.5 154.9 L780.0 142.6 L782.6 125.4 L785.1 129.5 L787.7 158.6 L790.2 160.8 L792.8 154.7 L795.3 154.5 L797.9 142.0 L800.4 126.9 L803.0 131.7 L805.5 159.9 L808.1 159.7 L810.6 157.5 L813.2 164.0 L815.7 155.1 L818.3 138.9 L820.8 144.8 L823.4 167.1 L825.9 170.2 L828.5 144.4 L831.0 140.5 L833.6 129.0 L836.1 111.7 L838.7 119.5 L841.2 148.0 L843.8 148.4 L846.3 155.7 L848.9 153.2 L851.4 140.7 L854.0 126.5 L856.5 129.6 L859.1 158.6 L861.6 159.6 L864.2 156.8 L866.7 154.1 L869.3 142.3 L871.8 126.3 L874.4 133.5 L876.9 160.6 L879.5 160.9 L882.0 157.0 L884.6 154.8 L887.1 142.9 L889.7 141.2 L892.2 143.9 L894.8 168.9 L897.3 168.8 L899.9 166.4 L902.4 162.2 L905.0 154.1 L907.5 110.4 L910.1 118.9 L912.6 150.9 L915.2 151.9 L917.7 145.1 L920.3 141.8 L922.8 130.5 L925.4 128.6 L927.9 132.7 L930.5 159.4 L933.0 159.6 L935.6 157.6 L938.1 155.4 L940.7 130.4 L943.2 105.9 L945.8 133.8 L948.3 161.6 L950.9 161.0 L953.4 158.2 L956.0 156.2 L958.5 145.2 L961.1 125.2 L963.6 131.1 L966.2 159.4 L968.7 171.2 L971.3 154.9 L973.8 149.4 L976.4 133.9 L978.9 141.0 L981.5 147.1 L984.0 168.9"/>
+      <line class="axis" x1="56" y1="230" x2="984" y2="230"/>
+      <text class="tick" x="56.0" y="246">Sep</text><text class="tick" x="132.5" y="246">Oct</text><text class="tick" x="211.5" y="246">Nov</text><text class="tick" x="288.0" y="246">Dec</text><text class="tick" x="367.0" y="246">Jan</text><text class="tick" x="446.1" y="246">Feb</text><text class="tick" x="517.5" y="246">Mar</text><text class="tick" x="596.5" y="246">Apr</text><text class="tick" x="673.0" y="246">May</text><text class="tick" x="752.0" y="246">Jun</text><text class="tick" x="828.5" y="246">Jul</text><text class="tick" x="907.5" y="246">Aug</text>
+    </svg></div></div>
+  </section>
+
+  <section>
+    <h2>Where the money goes</h2>
+    <p class="sub">Revenue through to gross margin after wastage — the project's north star.
+    The gap between the two green bars is what the optimiser in Sprint 4 is aiming at.</p>
+    <div class="card"><div class="scroll"><svg viewBox="0 0 1000 210" class="chart" role="img" aria-label="From revenue to gross margin after wastage"><rect class="bar s1" x="73.1" y="23.7" width="117.8" height="146.3" rx="3"><title>Revenue: ₹43.54 Cr</title></rect><text class="wlab" x="132.0" y="185">Revenue</text><text class="wval" x="132.0" y="17.7">₹43.54 Cr</text><rect class="bar neg" x="257.1" y="23.7" width="117.8" height="110.6" rx="3"><title>less COGS: ₹32.92 Cr</title></rect><text class="wlab" x="316.0" y="185">less COGS</text><text class="wval" x="316.0" y="17.7">₹32.92 Cr</text><rect class="bar s3" x="441.1" y="134.3" width="117.8" height="35.7" rx="3"><title>Gross margin: ₹10.62 Cr</title></rect><text class="wlab" x="500.0" y="185">Gross margin</text><text class="wval" x="500.0" y="128.3">₹10.62 Cr</text><rect class="bar neg" x="625.1" y="134.3" width="117.8" height="2.6" rx="3"><title>less wastage: ₹78.9 L</title></rect><text class="wlab" x="684.0" y="185">less wastage</text><text class="wval" x="684.0" y="128.3">₹78.9 L</text><rect class="bar s3" x="809.1" y="137.0" width="117.8" height="33.0" rx="3"><title>GM after wastage: ₹9.84 Cr</title></rect><text class="wlab" x="868.0" y="185">GM after wastage</text><text class="wval" x="868.0" y="131.0">₹9.84 Cr</text><line class="axis" x1="40" y1="170" x2="980" y2="170"/></svg></div></div>
+    <div class="finding"><b>₹78.9 L written off</b> — 1.8% of
+    revenue, or 7% of the gross margin the network earned.</div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div>
+        <h2>Wastage is concentrated</h2>
+        <p class="sub">Write-off value by category, over the year.</p>
+        <div class="card"><svg viewBox="0 0 520 276" class="chart"><rect class="bar s2" x="170.0" y="8" width="284.0" height="17" rx="3"><title>Dairy & Eggs: ₹41.5 L</title></rect><text class="rowlab" x="158" y="20">Dairy & Eggs</text><text class="rowval" x="461.0" y="20">₹41.5 L</text><rect class="bar s2" x="170.0" y="34" width="143.9" height="17" rx="3"><title>Meat, Fish & Seafood: ₹21.0 L</title></rect><text class="rowlab" x="158" y="46">Meat, Fish & Seafood</text><text class="rowval" x="320.9" y="46">₹21.0 L</text><rect class="bar s2" x="170.0" y="60" width="73.7" height="17" rx="3"><title>Fruits & Vegetables: ₹10.8 L</title></rect><text class="rowlab" x="158" y="72">Fruits & Vegetables</text><text class="rowval" x="250.7" y="72">₹10.8 L</text><rect class="bar s2" x="170.0" y="86" width="30.1" height="17" rx="3"><title>Ready to Eat & Frozen: ₹4.4 L</title></rect><text class="rowlab" x="158" y="98">Ready to Eat & Frozen</text><text class="rowval" x="207.1" y="98">₹4.4 L</text><rect class="bar s2" x="170.0" y="112" width="4.0" height="17" rx="3"><title>Bakery: ₹58,352</title></rect><text class="rowlab" x="158" y="124">Bakery</text><text class="rowval" x="181.0" y="124">₹58,352</text><rect class="bar s2" x="170.0" y="138" width="2.1" height="17" rx="3"><title>Beverages: ₹31,385</title></rect><text class="rowlab" x="158" y="150">Beverages</text><text class="rowval" x="179.1" y="150">₹31,385</text><rect class="bar s2" x="170.0" y="164" width="1.5" height="17" rx="3"><title>Staples & Packaged Food: ₹9,771</title></rect><text class="rowlab" x="158" y="176">Staples & Packaged Food</text><text class="rowval" x="178.5" y="176">₹9,771</text><rect class="bar s2" x="170.0" y="190" width="1.5" height="17" rx="3"><title>Snacks & Namkeen: ₹9,280</title></rect><text class="rowlab" x="158" y="202">Snacks & Namkeen</text><text class="rowval" x="178.5" y="202">₹9,280</text><rect class="bar s2" x="170.0" y="216" width="1.5" height="17" rx="3"><title>Baby & Pet Care: ₹4,293</title></rect><text class="rowlab" x="158" y="228">Baby & Pet Care</text><text class="rowval" x="178.5" y="228">₹4,293</text><rect class="bar s2" x="170.0" y="242" width="1.5" height="17" rx="3"><title>Household & Cleaning: ₹97</title></rect><text class="rowlab" x="158" y="254">Household & Cleaning</text><text class="rowval" x="178.5" y="254">₹97</text></svg></div>
+      </div>
+      <div>
+        <h2>The markdown ladder loses money</h2>
+        <p class="sub">Units and realised margin by price tier.</p>
+        <div class="card">
+          <table><thead><tr><th>Tier</th><th class="num">Units</th><th class="num">Margin</th></tr></thead>
+          <tbody><tr><td>Full price</td><td class='num'>4,022,864</td><td class='num '>₹10.89 Cr</td></tr><tr><td>Markdown 50%</td><td class='num'>169,989</td><td class='num bad'>₹-22.7 L</td></tr><tr><td>Markdown 30%</td><td class='num'>77,106</td><td class='num '>₹63,482</td></tr><tr><td>Rs 11 deal rail</td><td class='num'>11,658</td><td class='num bad'>₹-4.4 L</td></tr></tbody></table>
+          <div class="finding">The flat <b>50% ladder moved 169,989 units at
+          ₹-22.7 L</b> — it sells below landed cost. Clearing stock at any price is
+          not the same as clearing it profitably, and that is problem P2 in one line.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The supplier nobody is looking at</h2>
+    <p class="sub">Short-life dairy only, by supplier: average usable shelf life on arrival, and
+    what it cost.</p>
+    <div class="card">
+      <svg viewBox="0 0 1000 94" class="chart"><rect class="bar s3" x="210.0" y="8" width="724.0" height="17" rx="3"><title>SUP-NOMI-A: 6.58 days</title></rect><text class="rowlab" x="198" y="20">SUP-NOMI-A</text><text class="rowval" x="941.0" y="20">6.58 days</text><rect class="bar s3" x="210.0" y="34" width="515.4" height="17" rx="3"><title>SUP-DAIRY-A: 4.68 days</title></rect><text class="rowlab" x="198" y="46">SUP-DAIRY-A</text><text class="rowval" x="732.4" y="46">4.68 days</text><rect class="bar s3" x="210.0" y="60" width="346.8" height="17" rx="3"><title>SUP-DAIRY-B: 3.15 days</title></rect><text class="rowlab" x="198" y="72">SUP-DAIRY-B</text><text class="rowval" x="563.8" y="72">3.15 days</text></svg>
+      <div class="finding"><b>SUP-DAIRY-B delivers 3.15 usable days against
+      SUP-DAIRY-A's 4.68</b> — 33% less selling
+      window on the same products, across 6,170 batches. It is also the cheaper
+      supplier, which is why nobody has dropped it: procurement is measured on unit cost and the
+      write-off lands on operations. That trade-off is invisible without batch-level inventory.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div>
+        <h2>The fastest movers run out most</h2>
+        <p class="sub">Share of store-SKU-days out of stock, by sales-volume decile.</p>
+        <div class="card">
+          <svg viewBox="0 0 520 276" class="chart"><rect class="bar s1" x="170.0" y="8" width="284.0" height="17" rx="3"><title>decile 1: 26.5%</title></rect><text class="rowlab" x="158" y="20">decile 1</text><text class="rowval" x="461.0" y="20">26.5%</text><rect class="bar s1" x="170.0" y="34" width="69.2" height="17" rx="3"><title>decile 2: 6.5%</title></rect><text class="rowlab" x="158" y="46">decile 2</text><text class="rowval" x="246.2" y="46">6.5%</text><rect class="bar s1" x="170.0" y="60" width="44.7" height="17" rx="3"><title>decile 3: 4.2%</title></rect><text class="rowlab" x="158" y="72">decile 3</text><text class="rowval" x="221.7" y="72">4.2%</text><rect class="bar s1" x="170.0" y="86" width="18.6" height="17" rx="3"><title>decile 4: 1.7%</title></rect><text class="rowlab" x="158" y="98">decile 4</text><text class="rowval" x="195.6" y="98">1.7%</text><rect class="bar s1" x="170.0" y="112" width="48.4" height="17" rx="3"><title>decile 5: 4.5%</title></rect><text class="rowlab" x="158" y="124">decile 5</text><text class="rowval" x="225.4" y="124">4.5%</text><rect class="bar s1" x="170.0" y="138" width="32.1" height="17" rx="3"><title>decile 6: 3.0%</title></rect><text class="rowlab" x="158" y="150">decile 6</text><text class="rowval" x="209.1" y="150">3.0%</text><rect class="bar s1" x="170.0" y="164" width="80.3" height="17" rx="3"><title>decile 7: 7.5%</title></rect><text class="rowlab" x="158" y="176">decile 7</text><text class="rowval" x="257.3" y="176">7.5%</text><rect class="bar s1" x="170.0" y="190" width="86.8" height="17" rx="3"><title>decile 8: 8.1%</title></rect><text class="rowlab" x="158" y="202">decile 8</text><text class="rowval" x="263.8" y="202">8.1%</text><rect class="bar s1" x="170.0" y="216" width="109.4" height="17" rx="3"><title>decile 9: 10.2%</title></rect><text class="rowlab" x="158" y="228">decile 9</text><text class="rowval" x="286.4" y="228">10.2%</text><rect class="bar s1" x="170.0" y="242" width="140.1" height="17" rx="3"><title>decile 10: 13.1%</title></rect><text class="rowlab" x="158" y="254">decile 10</text><text class="rowval" x="317.1" y="254">13.1%</text></svg>
+          <div class="finding">Above the long tail the relationship runs the wrong way:
+          from <b>1.7% in decile 4</b> up to
+          <b>13.1% in decile 10</b>, which carries
+          54% of all units. The SKUs whose demand is most predictable are the
+          ones running out, because a flat safety-days rule cannot cope with demand this
+          over-dispersed. (Decile 1 is a separate story — barely-ranged tail stock that is out more
+          often than it is in.)</div>
+        </div>
+      </div>
+      <div>
+        <h2>How fresh it was when it sold</h2>
+        <p class="sub">Perishable units by days to expiry at the moment of sale.</p>
+        <div class="card">
+          <table><thead><tr><th>Remaining life</th><th class="num">Units</th><th class="num">Share</th></tr></thead>
+          <tbody><tr><td>expires today</td><td class='num'>46,913</td><td class='num'>10.8%</td></tr><tr><td>1 day left</td><td class='num'>95,869</td><td class='num'>22.1%</td></tr><tr><td>2-3 days</td><td class='num'>129,302</td><td class='num'>29.8%</td></tr><tr><td>4-7 days</td><td class='num'>129,475</td><td class='num'>29.8%</td></tr><tr><td>8+ days</td><td class='num'>32,276</td><td class='num'>7.4%</td></tr></tbody></table>
+          <div class="finding">Freshness is a customer-experience metric, not only a cost one.
+          Every unit sold on its expiry day is a review waiting to happen — and in this model it
+          also raises that customer's churn hazard.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The raw layer is deliberately broken</h2>
+    <p class="sub">Eight defects injected on purpose, each needing a different fix in staging.
+    Gate G1 confirms every one reconciles against the defect log — and that nothing else does not.</p>
+    <div class="card">
+      <table><thead><tr><th>#</th><th>Defect</th><th class="num">Rows</th></tr></thead>
+      <tbody><tr><td>1</td><td>Duplicate order events (retried webhook)</td><td class='num'>22,878</td></tr><tr><td>2</td><td>Late-arriving orders (up to 48h)</td><td class='num'>23,232</td></tr><tr><td>3</td><td>Inventory movements with no batch reference</td><td class='num'>49,056</td></tr><tr><td>4</td><td>Pack size in kg while uom says g (14 SKUs)</td><td class='num'>5,110</td></tr><tr><td>5</td><td>Returns encoded two different ways</td><td class='num'>10,474</td></tr><tr><td>6</td><td>Clickstream in UTC, POS in IST</td><td class='num'>3,088,103</td></tr><tr><td>7</td><td>SKU identifier format changes on 2026-03-01</td><td class='num'>1,686,581</td></tr><tr><td>8</td><td>Clickstream outage (2025-10-20, 2025-10-21)</td><td class='num'>22,497</td></tr></tbody></table>
+    </div>
+  </section>
+
+  <footer>
+    Generated by <code>simulator/profile_report.py</code> from the seed-42 run. All data is
+    synthetic, produced by a purpose-built model; no real company data is used and the brand names
+    are fictional. Next: the dbt warehouse, where these eight defects get cleaned for real.
+  </footer>
+</div>

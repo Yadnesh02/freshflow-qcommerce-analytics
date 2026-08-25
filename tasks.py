@@ -181,6 +181,11 @@ def t_gate(_: argparse.Namespace) -> int:
     return py("-m", "simulator.verify")
 
 
+def t_profile(_: argparse.Namespace) -> int:
+    """Render the Sprint 1 data profile from the emitted raw layer."""
+    return py("-m", "simulator.profile_report")
+
+
 def t_api(args: argparse.Namespace) -> int:
     """Serve the metrics API locally."""
     return run(
@@ -262,6 +267,7 @@ TARGETS = {
     "build": t_build,
     "test": t_test,
     "gate": t_gate,
+    "profile": t_profile,
     "lint": t_lint,
     "forecast": t_forecast,
     "recommend": t_recommend,
