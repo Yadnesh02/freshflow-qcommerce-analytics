@@ -1,0 +1,362 @@
+version: 2
+
+# The fact layer. Every model here is an event grain - one row per thing that
+# happened - and every one carries the foreign keys needed to slice it without
+# reaching back to staging.
+#
+# Two conventions hold across all six. Signed quantities: positive is into the
+# business, negative is out, so sums are net with no CASE statements. And
+# denormalised store_id / date_day on the high-traffic facts, because nearly
+# every query slices by them and paying a join on every read to save space once
+# is the wrong trade - guarded by a test that the copies never drift.
+
+models:
+  - name: fct_order_item
+    description: >
+      The keystone fact. One row per signed order line, carrying the
+      FEFO-allocated batch it was served from - the foreign key that makes
+      expiry, freshness and markdown analysis possible at all. Grain is
+      (order_id, sku_id, batch_id, line_type, source_feed): a line split
+      across two batches is two rows, and a return is a row with a negative
+      quantity. Ties to the raw feed on both count and revenue.
+    columns:
+      - name: order_item_key
+        description: "Surrogate over the natural grain. One column to test, and to merge on later."
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_order')
+                field: order_id
+      - name: sku_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: sku_id
+      - name: batch_id
+        description: >
+          The FEFO-allocated batch. Without this column a sale is attributable
+          to a SKU and a store and nothing else, and the entire expiry analysis
+          has nowhere to stand.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_inventory_batch')
+                field: batch_id
+      - name: store_id
+        description: "Denormalised from the header. A test asserts it never disagrees."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: date_day
+        description: "Event date, IST - not the partition the row arrived in."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: promo_id
+        description: "Null on an undiscounted line."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_promotion')
+                field: promo_id
+      - name: line_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["sale", "return"]
+      - name: signed_qty
+        description: "Positive for a sale, negative for a return. Sums to net units."
+        data_tests:
+          - not_null
+      - name: net_revenue
+        description: "signed_qty x unit_realized_price. Extended once, here."
+        data_tests:
+          - not_null
+      - name: cogs
+        data_tests:
+          - not_null
+      - name: dte_at_sale
+        description: "Days to expiry at the moment of sale. The freshness measure customers feel."
+        data_tests:
+          - not_null
+
+  - name: fct_order
+    description: >
+      One row per order, with the basket rolled up from its lines rather than
+      carried from the feed - the POS header's own unit count predates the
+      returns later posted into the same feed, so it is kept as
+      n_units_reported and never used as a total.
+    columns:
+      - name: order_id
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_id
+      - name: date_day
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: gmv
+        description: "Net of returns, because the lines it sums are signed."
+        data_tests:
+          - not_null
+      - name: net_units
+        data_tests:
+          - not_null
+      - name: requested_units
+        description: >
+          What the customer intended to buy, written when the basket was
+          created and before FEFO allocation ran. Not a stale unit count -
+          the gap against gross_units is demand the store could not serve.
+        data_tests:
+          - not_null
+      - name: unfulfilled_units
+        description: >
+          requested_units minus what was actually served: 1.11M units, 20.6% of
+          intended demand. The strongest censored-demand signal in the dataset,
+          because unlike the clickstream it is a specific customer asking for a
+          specific quantity rather than an anonymous impression. Never negative.
+        data_tests:
+          - not_null
+      - name: fill_rate
+        description: "Served over requested. Null on an order that requested nothing."
+      - name: is_short_filled
+        description: "True on half of all orders. What availability management is trying to move."
+        data_tests:
+          - not_null
+      - name: arrival_lag_days
+        description: "Up to 2. The reason S2.6 needs a 48h lookback."
+        data_tests:
+          - not_null
+
+  - name: fct_clickstream
+    description: >
+      Browsing demand per store, SKU, hour, event type and stock state, with
+      an event count. Not one row per event: the collector timestamps to the
+      hour, so 44% of the raw feed is rows identical to another row, and a
+      per-event grain would mean inventing a surrogate key to separate records
+      that differ in nothing. Carries was_in_stock, the only record of demand
+      that existed while stock was zero. The feed is anonymous - no session or
+      customer, and none invented. Two days are missing by defect and stay
+      missing.
+    columns:
+      - name: event_count
+        description: "Events in this store, SKU, hour, type and stock state. Sums back to the raw feed."
+        data_tests:
+          - not_null
+      - name: censored_event_count
+        description: "Of those, how many happened while there was nothing to sell. Sprint 3 reads this."
+        data_tests:
+          - not_null
+      - name: hour_ts_ist
+        description: "The hour the feed resolves to. IST, conformed from UTC by defect 6."
+        data_tests:
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: sku_id
+        description: "Conformed to the catalogue format. The relationships test proves defect 7 is fixed."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: sku_id
+      - name: date_day
+        data_tests:
+          - not_null
+      - name: event_hour_ist
+        description: "0-23. The hour the demand curve is drawn on."
+        data_tests:
+          - not_null
+      - name: is_censored_demand
+        description: "Somebody looked and there was nothing to sell them. What Sprint 3 corrects for."
+        data_tests:
+          - not_null
+
+  - name: fct_inventory_batch
+    description: >
+      One row per physical batch received into a store, with its consumption
+      joined from the movement ledger. Batch grain is the modelling decision
+      the project rests on: two deliveries of one SKU on different days carry
+      different expiry dates and different risk.
+    columns:
+      - name: batch_id
+        data_tests:
+          - unique
+          - not_null
+      - name: sku_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: sku_id
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: supplier_id
+        description: "Resolves for every batch, including SUP-OPENING via dim_supplier's unknown member."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_supplier')
+                field: supplier_id
+      - name: expiry_date
+        data_tests:
+          - not_null
+      - name: qty_received
+        data_tests:
+          - not_null
+      - name: is_reconciled
+        description: >
+          False where the batch's inbound movement was quarantined by defect 3,
+          so the balance cannot close. Recorded rather than left for the S2.7
+          reconciliation to discover as an unexplained gap.
+        data_tests:
+          - not_null
+      - name: writeoff_value
+        description: "Landed-cost value written off at expiry. The number the project exists to cut."
+        data_tests:
+          - not_null
+
+  - name: fct_inventory_movement
+    description: >
+      The stock ledger - every event that moved a unit into or out of a batch,
+      with the running balance precomputed. On-hand is derived from this by
+      replay, never snapshotted, so every balance is auditable back to events.
+      Ordered by movement_seq: the feed is daily-grained and event_date leaves
+      intra-day sequence undefined.
+    columns:
+      - name: movement_seq
+        description: "Monotonic replay order. Every window function over this table orders by it."
+        data_tests:
+          - unique
+          - not_null
+      - name: batch_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_inventory_batch')
+                field: batch_id
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: event_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  ["inbound", "sale", "opening_balance", "expiry_writeoff", "transfer_in", "transfer_out", "damage", "cycle_count_adj"]
+      - name: qty_delta
+        description: "Signed. Positive into the batch, negative out."
+        data_tests:
+          - not_null
+      - name: running_balance
+        description: "Cumulative qty_delta by movement_seq within a batch. Never recomputed downstream."
+        data_tests:
+          - not_null
+      - name: date_day
+        data_tests:
+          - not_null
+
+  - name: fct_price_history
+    description: >
+      Priced intervals per store and SKU. The source is a promotion ledger, not
+      a full price ledger - a day with no row was selling at catalogue base
+      price, which lives in dim_product_snapshot. Bounds are half-open, and an
+      interval breaks on a skipped day as well as on a price change, because
+      the feed is sparse.
+    columns:
+      - name: price_interval_key
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: sku_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: sku_id
+      - name: effective_from_date
+        data_tests:
+          - not_null
+      - name: effective_to_date
+        description: "Exclusive. Never null - the ledger records when a promotion stopped."
+        data_tests:
+          - not_null
+      - name: promo_id
+        description: >
+          The deepest promotion actually observed, which is the one that set
+          the price. Where two stacked, the others are in stacked_promo_ids.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_promotion')
+                field: promo_id
+      - name: is_promo_stacked
+        description: >
+          A markdown and the deal slot on the same SKU-day. Sprint 4 must not
+          let markdown performance and deal-slot performance each claim these
+          units - the same uplift counted twice, in two marts, each correct
+          alone.
+        data_tests:
+          - not_null
+      - name: realized_price
+        data_tests:
+          - not_null
+      - name: duration_days
+        data_tests:
+          - not_null

@@ -6,11 +6,25 @@ freshflow:
   target: dev
   outputs:
     # full 14-store, 365-day warehouse - what the experiment runs on
+    #
+    # The settings block is not tuning for speed, it is what keeps the build
+    # survivable on a laptop. Several facts are multi-million-row models with
+    # window functions, and dbt runs them concurrently: left to default DuckDB
+    # claims most of the machine's RAM across all threads at once and dies with
+    # an access violation rather than a clean out-of-memory error, which is a
+    # very confusing way to learn you needed a memory limit.
+    #
+    # preserve_insertion_order=false lets large results stream out instead of
+    # being buffered whole - the single biggest saving here, and harmless
+    # because every model that cares about order states it in SQL.
     dev:
       type: duckdb
       path: "../data/warehouse/freshflow.duckdb"
       schema: main
-      threads: 4
+      threads: 3
+      settings:
+        memory_limit: "6GB"
+        preserve_insertion_order: false
 
     # 30-day slice generated fresh on every CI run, so builds stay under a minute
     ci:

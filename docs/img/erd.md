@@ -103,7 +103,6 @@ erDiagram
         timestamp delivered_ts
         decimal   gmv
         decimal   discount_total
-        decimal   delivery_fee
         boolean   is_late
     }
 
@@ -123,14 +122,14 @@ erDiagram
     }
 
     fct_clickstream {
-        string    event_id PK
-        string    session_id
-        string    customer_id FK
-        string    store_id FK
-        string    sku_id FK
-        string    event_type "search|impression|pdp_view|add_to_cart|notify_me|checkout"
-        timestamp event_ts
-        boolean   was_in_stock "the uncensored-demand signal"
+        string    store_id PK "FK"
+        string    sku_id PK "FK"
+        timestamp hour_ts_ist PK "the feed timestamps to the hour"
+        string    event_type PK "search|impression|pdp_view|add_to_cart|notify_me|checkout"
+        boolean   was_in_stock PK "the uncensored-demand signal"
+        date      date_day FK
+        int       event_count
+        int       censored_event_count
     }
 ```
 
@@ -195,11 +194,10 @@ erDiagram
 
     fct_inventory_movement {
         bigint    movement_seq PK "monotonic - an event log needs a replay order"
-        string    movement_id
         string    batch_id FK
         string    event_type "inbound|sale|transfer_in|transfer_out|damage|expiry_writeoff|cycle_count_adj"
         int       qty_delta
-        timestamp event_ts
+        date      event_date FK "the ledger is daily-grained; movement_seq is the intra-day order"
     }
 
     fct_availability_hour {
