@@ -61,3 +61,13 @@ jobs:
 
       - name: dbt build
         run: uv run python tasks.py build --target ci
+
+      # The staging contract runs only once a warehouse exists, so it is skipped
+      # by the earlier pytest step and executed here against the CI slice. It
+      # asserts each of the eight injected defects was repaired by the amount
+      # data/_manifest/dirt.json says was injected - which dbt's own tests, all
+      # of which look only at the output, cannot check.
+      - name: Warehouse contract tests
+        env:
+          FRESHFLOW_WAREHOUSE: data/warehouse/freshflow_ci.duckdb
+        run: uv run pytest -m needs_warehouse

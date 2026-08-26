@@ -98,6 +98,11 @@ def t_simulate(args: argparse.Namespace) -> int:
 
 def dbt(*args: str, check: bool = True) -> int:
     """Invoke dbt as a module so it resolves from the active venv, not PATH."""
+    # The staging sources are read_parquet() calls, and a relative path in one
+    # resolves against whatever process opens the view - not against dbt. An
+    # absolute base path keeps them readable from a notebook, a test or the
+    # metrics API instead of only from transform/.
+    os.environ.setdefault("FRESHFLOW_RAW_DIR", (DATA / "raw").as_posix())
     return run(
         [sys.executable, "-m", "dbt.cli.main", *args, "--profiles-dir", "."],
         cwd=TRANSFORM,

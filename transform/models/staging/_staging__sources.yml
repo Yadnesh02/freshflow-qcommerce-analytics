@@ -1,0 +1,128 @@
+version: 2
+
+# The Bronze layer, read straight off the parquet the simulator emits. Nothing
+# is loaded into DuckDB first: dbt-duckdb's `external_location` lets a source
+# resolve to a read_parquet() call, so `dbt build` scans the files in place and
+# the warehouse holds only what staging and the marts actually produce.
+#
+# `{name}` interpolates the table name, which is also the feed's directory
+# name. The base path defaults to `../data/raw`, relative to transform/ the way
+# profiles.yml is, so a bare `dbt build` from that directory works with no
+# setup; tasks.py overrides it with an absolute path so the staging views stay
+# readable from a process whose working directory is somewhere else - a
+# notebook, the metrics API, a test.
+#
+# `union_by_name` is not optional here. DuckDB infers a multi-file schema from
+# whichever file it reads first, and the opening-balance batches on day one
+# carry a null `po_id` - so that partition types the column as NULL while every
+# later one types it VARCHAR. Whether the scan succeeds then depends on file
+# ordering, which is a bug that appears and disappears. Unioning by name pins
+# it. On this dataset it costs about 20ms.
+#
+# `hive_partitioning` is what surfaces `dt` - the partition a row arrived in,
+# which is NOT the day it happened. Defect 2 pulls those apart deliberately and
+# every staging model keeps both, because the difference is the whole reason
+# agg_store_sku_day needs a 48h lookback (S2.6).
+#
+# Source freshness is deliberately not configured yet: defect 8 removes two
+# clickstream partitions entirely, and a missing day has to fail a row-count
+# check per source per day rather than a staleness check on the newest file.
+# That check lands with the rest of the data-quality suite in S2.7.
+
+sources:
+  - name: pos
+    description: "Point of sale. Orders, the lines inside them, and returns. Writes IST."
+    meta: &parquet
+      external_location: "read_parquet('{{ env_var('FRESHFLOW_RAW_DIR', '../data/raw') }}/{name}/**/*.parquet', hive_partitioning = true, union_by_name = true)"
+    tables:
+      - name: pos_orders
+        description: >
+          One row per order header, plus retried-webhook duplicates (defect 1)
+          and rows sitting in a partition up to 48h after they happened
+          (defect 2).
+        columns:
+          - name: order_id
+            description: "Not unique in the raw feed - duplicates are removed in stg_pos__orders."
+          - name: order_ts
+            description: "IST already. Can be up to two days before its `dt` partition."
+      - name: pos_order_items
+        description: >
+          One row per order, SKU and FEFO-allocated batch. Carries duplicates
+          (defect 1) and returns encoded as negative quantities (defect 5).
+        columns:
+          - name: batch_id
+            description: "The keystone. Attributes a sale to the exact expiry date it consumed."
+          - name: qty
+            description: "Negative on rows that are really returns - see defect 5."
+          - name: discount_amt
+            description: "Per unit, not per line: base price minus realized price."
+      - name: pos_returns
+        description: "The other half of defect 5: returns as positive rows in their own feed."
+
+  - name: wms
+    description: "Warehouse management. Batch receipts, the movement ledger, POs, stockouts."
+    meta: *parquet
+    tables:
+      - name: wms_inventory_batch
+        description: "One row per batch received into a store, with its expiry date."
+      - name: wms_inventory_movement
+        description: >
+          The append-only stock ledger. ~1% of rows have no batch reference
+          (defect 3) and are routed to stg_quarantine rather than dropped.
+        columns:
+          - name: movement_seq
+            description: "Monotonic. An event log needs a replay order that survives a re-sort."
+          - name: batch_id
+            description: "Null on the quarantined rows."
+      - name: wms_purchase_orders
+        description: "Replenishment orders and what actually arrived against them."
+      - name: wms_stockout_interval
+        description: "One row per store, SKU and hour with no sellable stock."
+
+  - name: catalog
+    description: "Merchandising. The daily product catalogue and the price ledger."
+    meta: *parquet
+    tables:
+      - name: catalog_snapshot
+        description: >
+          Daily snapshot of every SKU. 14 SKUs report pack size in kilograms
+          while the unit still says grams (defect 4).
+        columns:
+          - name: pack_qty
+            description: "Repaired in stg_catalog__products. Raw values can be 1000x too small."
+      - name: price_history
+        description: "Effective base and realized price per store, SKU and day."
+
+  - name: web
+    description: "Front-end event collector. Writes UTC, and went down for two days."
+    meta: *parquet
+    tables:
+      - name: clickstream
+        description: >
+          Browsing events, including the ones that happened while stock was
+          zero - the only uncensored record of demand this dataset has. Carries
+          three defects at once: UTC timestamps (6), a mid-year identifier
+          migration (7) and two missing partitions (8).
+        columns:
+          - name: event_ts_utc
+            description: "UTC. Conformed to IST in stg_web__clickstream."
+          - name: sku_id
+            description: "`SKU-00042` before 2026-03-01, `SKU_42` after it."
+          - name: was_in_stock
+            description: "False means demand existed and could not be served."
+
+  - name: crm
+    description: "Customer master, snapshotted monthly."
+    meta: *parquet
+    tables:
+      - name: customer_snapshot
+        description: "One row per customer per monthly snapshot, with churn date if known."
+
+  - name: ref
+    description: "Reference data. Small, slow-moving, emitted once."
+    meta: *parquet
+    tables:
+      - name: ref_stores
+        description: "The 14 dark stores, their catchments and their capacity."
+      - name: ref_suppliers
+        description: "Suppliers, their lead times and their inbound freshness profile."

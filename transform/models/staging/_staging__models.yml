@@ -1,0 +1,462 @@
+version: 2
+
+# Staging is the only layer allowed to know that the raw feeds are broken.
+# Everything below it may assume duplicates are gone, timestamps are IST, units
+# are consistent, identifiers conform to the catalogue, and anything that could
+# not be repaired is sitting in stg_quarantine with a reason attached.
+#
+# The tests here are the ones that prove those claims. Distribution and
+# reconciliation tests land with the rest of the suite in S2.7.
+
+models:
+  - name: stg_pos__orders
+    description: >
+      Order headers, deduplicated on the business row hash (defect 1) and
+      carrying the arrival lag that defect 2 creates. One row per order.
+    columns:
+      - name: order_id
+        description: >
+          Unique after deduplication. The test is the point: content-identical
+          rows collapse on the hash, but two rows sharing an id and disagreeing
+          on anything else fail here rather than being silently resolved.
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        description: "Fulfilling dark store."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ref__stores')
+                field: store_id
+      - name: customer_id
+        description: "Who placed it."
+        data_tests:
+          - not_null
+      - name: order_ts_ist
+        description: "When the order was placed. IST, as the POS writes it."
+        data_tests:
+          - not_null
+      - name: order_date_ist
+        description: "Event date. What every fact table should partition on - not arrival_date."
+        data_tests:
+          - not_null
+      - name: arrival_date
+        description: >
+          Earliest partition the row appeared in. Up to two days after
+          order_date_ist, which is why S2.6 needs a 48h lookback.
+        data_tests:
+          - not_null
+      - name: arrival_lag_days
+        description: "arrival_date minus order_date_ist. Never negative, never above 2."
+      - name: payment_mode
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["upi", "card", "cod", "wallet"]
+      - name: row_hash
+        description: "Fingerprint of the business columns. Unique by construction after dedup."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_pos__order_items
+    description: >
+      Order lines, deduplicated on the business row hash (defect 1). Grain is
+      (order_id, sku_id, batch_id) - a line split across two batches by FEFO is
+      two real rows. Negative quantities are returns and are left in place;
+      stg_pos__order_lines normalises them.
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pos__orders')
+                field: order_id
+      - name: sku_id
+        data_tests:
+          - not_null
+      - name: batch_id
+        description: >
+          The FEFO-allocated batch. The keystone of the model: without it a
+          sale cannot be attributed to an expiry date and nothing else in this
+          project works.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_wms__inventory_batches')
+                field: batch_id
+      - name: qty
+        description: "Negative on the rows that are really returns (defect 5, encoding A)."
+        data_tests:
+          - not_null
+      - name: unit_realized_price
+        description: "What the unit actually sold for, after any markdown."
+        data_tests:
+          - not_null
+      - name: dte_at_sale
+        description: "Days to expiry at the moment of sale. Never negative - nothing expired is sold."
+        data_tests:
+          - not_null
+      - name: row_hash
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_pos__returns
+    description: >
+      The standalone returns feed - defect 5, encoding B. Positive quantities,
+      no prices. Not deduplicated: see the model's own note.
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+      - name: returned_qty
+        description: "Positive. Signed in stg_pos__order_lines, not here."
+        data_tests:
+          - not_null
+      - name: return_reason
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["damaged", "wrong_item", "quality", "late"]
+
+  - name: stg_pos__order_lines
+    description: >
+      Defect 5 resolved. One signed movement per line regardless of which
+      system wrote it: signed_qty is positive for a sale, negative for a
+      return. Net units are sum(signed_qty) and net revenue is
+      sum(signed_qty * unit_realized_price), with no CASE statement downstream.
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pos__orders')
+                field: order_id
+      - name: sku_id
+        data_tests:
+          - not_null
+      - name: batch_id
+        data_tests:
+          - not_null
+      - name: line_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["sale", "return"]
+      - name: source_feed
+        description: "Which system wrote the row. Kept so the two encodings can be counted apart."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["pos_order_items", "pos_returns"]
+      - name: signed_qty
+        description: "Positive for a sale, negative for a return. Never zero."
+        data_tests:
+          - not_null
+      - name: unit_realized_price
+        description: >
+          Recovered from the sale line for returns logged in the separate feed,
+          so a return is valued at the price paid rather than today's price.
+        data_tests:
+          - not_null
+
+  - name: stg_catalog__products
+    description: >
+      Daily product catalogue with the unit drift of defect 4 repaired. One row
+      per SKU per snapshot day; the full history is kept because the SCD2
+      snapshot in S2.2 needs it.
+    columns:
+      - name: sku_id
+        data_tests:
+          - not_null
+      - name: snapshot_date
+        data_tests:
+          - not_null
+      - name: pack_qty
+        description: "Repaired. A gram or millilitre pack below 1 arrived in kg or L and is rescaled."
+        data_tests:
+          - not_null
+      - name: pack_qty_was_repaired
+        description: "Where the defect 4 rescale fired. Counted against the defect log by the contract test."
+        data_tests:
+          - not_null
+      - name: pack_size_base_units
+        description: "Pack size in grams, millilitres or pieces. What per-kilo prices divide by."
+        data_tests:
+          - not_null
+      - name: uom
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["g", "kg", "ml", "L", "pc"]
+      - name: temp_zone
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["frozen", "chilled", "ambient"]
+      - name: base_price
+        data_tests:
+          - not_null
+
+  - name: stg_catalog__price_history
+    description: "Effective base and realized price per store, SKU and day, with the discount derived."
+    columns:
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: sku_id
+        data_tests:
+          - not_null
+      - name: effective_date
+        data_tests:
+          - not_null
+      - name: discount_pct
+        description: "Against base price, not MRP: the question is how far we cut our own price."
+
+  - name: stg_web__clickstream
+    description: >
+      Browsing events conformed to IST (defect 6) and to the catalogue's SKU
+      format (defect 7). Carries was_in_stock, the only record of demand that
+      existed while stock was zero. Two partitions are missing (defect 8) and
+      are deliberately not filled.
+    columns:
+      - name: sku_id
+        description: >
+          Conformed to the catalogue's zero-padded format. The relationships
+          test is the one that matters: an inner join would have silently
+          dropped 1.69M post-migration events and still returned rows.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_catalog__products')
+                field: sku_id
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ref__stores')
+                field: store_id
+      - name: event_ts_ist
+        description: "Conformed. The suffix is not decoration - an unsuffixed event_ts caused defect 6."
+        data_tests:
+          - not_null
+      - name: event_hour_ist
+        description: "0-23 IST. The hour the demand curve is drawn on."
+        data_tests:
+          - not_null
+      - name: event_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["search", "impression", "pdp_view", "add_to_cart", "notify_me", "checkout"]
+      - name: is_censored_demand
+        description: "True where somebody looked and there was nothing to sell them."
+        data_tests:
+          - not_null
+
+  - name: stg_wms__inventory_batches
+    description: >
+      Batch receipts - one row per quantity of one SKU, in one store, with one
+      expiry date. The grain the entire project depends on.
+    columns:
+      - name: batch_id
+        data_tests:
+          - unique
+          - not_null
+      - name: sku_id
+        data_tests:
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ref__stores')
+                field: store_id
+      - name: supplier_id
+        description: >
+          Real for received stock. The 15,557 opening-balance batches - stock
+          that existed on day one, from no purchase order - carry the sentinel
+          `SUP-OPENING`, which is not a supplier and is not in ref_suppliers.
+          dim_supplier (S2.3) needs an explicit unknown member for it rather
+          than an outer join, or every supplier rollup quietly loses opening
+          stock.
+        data_tests:
+          - not_null
+          - relationships:
+              config:
+                where: "not is_opening_balance"
+              arguments:
+                to: ref('stg_ref__suppliers')
+                field: supplier_id
+      - name: is_opening_balance
+        description: "Day-one stock. No purchase order, no supplier, no inbound freshness."
+        data_tests:
+          - not_null
+      - name: expiry_date
+        data_tests:
+          - not_null
+      - name: qty_received
+        data_tests:
+          - not_null
+      - name: usable_days
+        description: "Shelf life as received, not as printed. What suppliers are actually compared on."
+
+  - name: stg_wms__inventory_movements
+    description: >
+      The stock ledger, restricted to movements that resolve to a batch.
+      Rows with no batch reference (defect 3) are in stg_quarantine, not
+      deleted. Replay order is movement_seq, never event_date.
+    columns:
+      - name: movement_seq
+        description: "Monotonic replay order. A running balance over an undefined order is arbitrary."
+        data_tests:
+          - unique
+          - not_null
+      - name: batch_id
+        description: "Never null here - that is the whole difference between this model and the source."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_wms__inventory_batches')
+                field: batch_id
+      - name: event_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  ["inbound", "sale", "opening_balance", "expiry_writeoff", "transfer_in", "transfer_out", "damage", "cycle_count_adj"]
+      - name: qty_delta
+        data_tests:
+          - not_null
+
+  - name: stg_wms__purchase_orders
+    description: "Replenishment orders and what arrived against them, with fill rate and lead time derived."
+    columns:
+      - name: po_id
+        data_tests:
+          - unique
+          - not_null
+      - name: supplier_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ref__suppliers')
+                field: supplier_id
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: fill_rate
+        description: "Received over ordered. Separates a short delivery from a late one."
+
+  - name: stg_wms__stockout_intervals
+    description: >
+      One row per store, SKU and hour with no sellable stock. The supply-side
+      counterpart to the clickstream's was_in_stock.
+    columns:
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: sku_id
+        data_tests:
+          - not_null
+      - name: stockout_hour_ist
+        data_tests:
+          - not_null
+
+  - name: stg_crm__customers
+    description: >
+      Customer master, one row per customer per monthly snapshot. Every
+      snapshot is kept so that churn knowledge cannot leak backwards into a
+      cohort analysis.
+    columns:
+      - name: customer_id
+        data_tests:
+          - not_null
+      - name: snapshot_date
+        data_tests:
+          - not_null
+      - name: home_store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ref__stores')
+                field: store_id
+      - name: acquisition_channel
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["organic", "paid_social", "referral", "app_store"]
+
+  - name: stg_ref__stores
+    description: "The 14 dark stores, their catchments and their capacity."
+    columns:
+      - name: store_id
+        data_tests:
+          - unique
+          - not_null
+      - name: catchment_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["premium", "mid", "mass"]
+
+  - name: stg_ref__suppliers
+    description: "Suppliers, their lead times and their inbound freshness distribution."
+    columns:
+      - name: supplier_id
+        data_tests:
+          - unique
+          - not_null
+      - name: otif_rate
+        data_tests:
+          - not_null
+
+  - name: stg_quarantine
+    description: >
+      Rows the staging layer refused, with the reason recorded. The contract
+      is that nothing is dropped silently: every exclusion in staging has a
+      matching row here, and S2.7 tests that the two sides add back up to the
+      raw feed. impact_units is what makes the stock reconciliation
+      quantitative - the ledger may fail to balance, but only by this much.
+    columns:
+      - name: source_name
+        data_tests:
+          - not_null
+      - name: reason_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["missing_batch_reference", "return_without_matching_sale"]
+      - name: reason
+        description: "Written for whoever reads the data-quality page, not for a log."
+        data_tests:
+          - not_null
+      - name: record_key
+        description: "The natural key of the rejected row, so it can be found in the raw feed."
+        data_tests:
+          - unique
+          - not_null
+      - name: impact_units
+        description: "Quantity this exclusion removed from a balance. The bound the reconciliation is allowed."
+        data_tests:
+          - not_null
+      - name: payload
+        description: "The row itself, as JSON. Stored because someone always asks whether it was recoverable."
+        data_tests:
+          - not_null

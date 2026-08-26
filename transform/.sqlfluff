@@ -8,6 +8,11 @@ exclude_rules = ST06
 
 [sqlfluff:templater:jinja]
 apply_dbt_builtins = true
+# Without this the project's own macros are undefined and every model that
+# calls one fails to parse, so the linter reports a template error instead of
+# the SQL problems it was run to find. The dbt templater would also resolve
+# them, at the cost of compiling the whole project on every lint.
+load_macros_from_path = macros
 
 [sqlfluff:indentation]
 tab_space_size = 4
