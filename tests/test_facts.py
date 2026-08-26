@@ -1,4 +1,4 @@
-"""Contract for the fact layer (task S2.4).
+"""Contract for the fact layer (tasks S2.4 and S2.5).
 
 The dbt tests assert keys, relationships and the tie to raw. This file asserts
 the things that make the fact layer coherent rather than merely correct: that
@@ -235,3 +235,117 @@ def test_stacked_promotions_are_flagged_rather_than_double_counted(con) -> None:
         """,
     )
     assert unflagged == 0, f"{unflagged} intervals had promos stack without being flagged"
+
+
+# --------------------------------------------------- availability (S2.5)
+def test_time_weighted_availability_differs_from_a_midnight_snapshot(con) -> None:
+    """The S2.5 acceptance gate, and the reason the table exists.
+
+    A midnight snapshot asks whether stock existed at 00:00. On a day that ran
+    out at 07:00 the answer is yes, and the day records as fully available
+    while the entire morning rush sold nothing. If these two measures ever
+    agreed, the hourly model would have collapsed to a daily one and nobody
+    would be able to tell from the output, because both still look like
+    percentages.
+    """
+    time_weighted, midnight, stockout_days, hidden = con.execute(
+        """
+        with by_day as (
+            select
+                store_id, sku_id, date_day,
+                sum(hours_in_state) as hours_carried,
+                sum(case when is_in_stock then hours_in_state else 0 end) as hours_in_stock,
+                max(case when from_hour_ist = 0 and is_in_stock then 1 else 0 end) as at_midnight
+            from marts.fct_availability_hour
+            group by store_id, sku_id, date_day
+        )
+        select
+            sum(hours_in_stock) / cast(sum(hours_carried) as double),
+            avg(cast(at_midnight as double)),
+            count(*) filter (where hours_in_stock < 24),
+            count(*) filter (where at_midnight = 1 and hours_in_stock < 24)
+        from by_day
+        """
+    ).fetchone()
+
+    assert midnight > time_weighted, (
+        f"a midnight snapshot ({midnight:.4%}) does not overstate availability "
+        f"against the time-weighted measure ({time_weighted:.4%})"
+    )
+    assert midnight - time_weighted > 0.01, "the gap is too small to be worth the table"
+    assert hidden / stockout_days > 0.9, (
+        f"only {hidden / stockout_days:.1%} of stockout days are invisible to a "
+        "midnight snapshot - the two measures are closer than the model implies"
+    )
+
+
+def test_every_placeable_stockout_reaches_the_availability_fact(con) -> None:
+    """Regression: the first version dropped 63% of them.
+
+    Its assortment window ran from first receipt to last batch expiry, which
+    sounds right and deletes exactly the days that matter most - a SKU the
+    store still lists but has stopped replenishing is out of stock
+    indefinitely, and all of those days fall after its last batch expired.
+    Availability read 98.4% instead of 95.5%. Nothing failed; the number was
+    just wrong, and plausible.
+    """
+    recorded, in_fact = con.execute(
+        """
+        with carried_from as (
+            select store_id, sku_id, min(received_date) as first_carried_date
+            from marts.fct_inventory_batch group by store_id, sku_id
+        ),
+        placeable as (
+            select stockouts.store_id, stockouts.sku_id, stockouts.stockout_date
+            from staging.stg_wms__stockout_intervals as stockouts
+            join carried_from
+                on stockouts.store_id = carried_from.store_id
+                and stockouts.sku_id = carried_from.sku_id
+                and stockouts.stockout_date >= carried_from.first_carried_date
+        )
+        select
+            (select count(*) from placeable),
+            (select count(*) from (
+                select distinct store_id, sku_id, date_day
+                from marts.fct_availability_hour where not is_in_stock))
+        """
+    ).fetchone()
+    assert recorded == in_fact, (
+        f"{recorded:,} placeable stockouts recorded, {in_fact:,} reached the fact"
+    )
+
+
+def test_the_interval_model_is_far_smaller_than_the_hourly_grid(con) -> None:
+    """The design trade, asserted rather than assumed.
+
+    Intervals are only worth the extra thought if they are dramatically
+    cheaper. If this ratio ever approached 24, stock state would be changing
+    almost every hour and the dense grid would be the honest representation.
+    """
+    rows, carried_days = con.execute(
+        """
+        select
+            (select count(*) from marts.fct_availability_hour),
+            (select count(*) from (
+                select distinct store_id, sku_id, date_day from marts.fct_availability_hour))
+        """
+    ).fetchone()
+
+    dense_rows = carried_days * 24
+    assert rows < dense_rows / 10, (
+        f"{rows:,} interval rows against {dense_rows:,} dense - not enough saving "
+        "to justify the representation"
+    )
+
+
+def test_out_of_stock_intervals_carry_no_stock(con) -> None:
+    """An availability table that says out of stock and reports units on hand
+    is worse than one that says nothing at all."""
+    contradictory = one(
+        con,
+        """
+        select count(*) from marts.fct_availability_hour
+        where not is_in_stock and on_hand_units <> 0
+        """,
+    )
+    assert contradictory == 0

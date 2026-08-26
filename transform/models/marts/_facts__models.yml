@@ -303,6 +303,69 @@ models:
         data_tests:
           - not_null
 
+  - name: fct_availability_hour
+    description: >
+      Availability at hourly resolution, held as state intervals rather than a
+      dense grid - one row per contiguous run of in-stock or out-of-stock,
+      keyed by the hour it starts. The dense version would be 170M rows, 99% of
+      them repeating the row above. The WMS records the hour stock ran out, one
+      row per store-SKU-day, so a day reads as in stock until that hour and out
+      of it until replenishment. On-hand is a day-start figure because the
+      movement ledger is daily-grained and there is no honest way to carry a
+      unit count across hours.
+    columns:
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: sku_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: sku_id
+      - name: hour_ts_ist
+        description: "Start of the interval. With store and SKU, the grain."
+        data_tests:
+          - not_null
+      - name: valid_to_hour_ts_ist
+        description: "Exclusive. The next state begins here."
+        data_tests:
+          - not_null
+      - name: date_day
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: hours_in_state
+        description: >
+          Duration of the run. The weight in time-weighted availability, and
+          the column that makes intervals equivalent to the dense grid.
+        data_tests:
+          - not_null
+      - name: is_in_stock
+        data_tests:
+          - not_null
+      - name: on_hand_units
+        description: >
+          Balance as the day opened, replayed from the ledger in movement_seq
+          order. Not an hourly figure - the ledger has no time component, and
+          intra-day depletion is Sprint 3's modelling problem, not a column.
+        data_tests:
+          - not_null
+      - name: in_assortment
+        description: "True throughout: every row is a day the store carried the SKU."
+        data_tests:
+          - not_null
+      - name: ran_out_at_hour
+        description: "The hour the WMS recorded depletion. Null on a day that never ran short."
+
   - name: fct_price_history
     description: >
       Priced intervals per store and SKU. The source is a promotion ledger, not
