@@ -127,15 +127,23 @@ class DirtInjector:
             late = frame.iloc[pick]
             delay = self.rng.integers(1, LATE_MAX_DAYS + 1, n)
 
+            relocated = np.zeros(n, dtype=bool)
             for offset in range(1, LATE_MAX_DAYS + 1):
-                chunk = late[delay == offset]
+                at_offset = delay == offset
                 target = self._day_of(path) + dt.timedelta(days=offset)
-                if chunk.empty or target not in by_day:
+                if not at_offset.any() or target not in by_day:
                     continue
-                moved.setdefault(target, []).append(chunk)
-                total += len(chunk)
+                moved.setdefault(target, []).append(late[at_offset])
+                relocated |= at_offset
+                total += int(at_offset.sum())
 
-            frame.drop(frame.index[pick]).to_parquet(path, index=False)
+            # Only rows that actually landed somewhere are removed from here.
+            # Near the end of the run the target partition does not exist, and
+            # dropping those anyway - which an unguarded drop does - deletes
+            # the orders outright and orphans their item lines. That is not a
+            # documented defect, it is data loss, and it is invisible until
+            # something tries to join lines back to their header.
+            frame.drop(frame.index[pick[relocated]]).to_parquet(path, index=False)
 
         for day, chunks in moved.items():
             path = by_day[day]

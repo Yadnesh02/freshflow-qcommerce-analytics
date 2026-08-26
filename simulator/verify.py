@@ -169,6 +169,27 @@ class Gate:
             f"{bad:,} cross-store sales",
         )
 
+    def check_every_line_has_an_order(self) -> None:
+        """Referential integrity in the other direction, which nothing else covers.
+
+        The batch check below proves a line points at real stock. It says
+        nothing about whether the order it belongs to still exists, and the
+        late-arrival pass moves order headers between partitions - so a bug
+        there deletes headers while their lines stay put. Revenue then depends
+        on which side of the join you count from, which is precisely the
+        question gate G2 has to answer exactly.
+        """
+        orphans = self.one(f"""
+            select count(*) from {self.src("pos_order_items")} i
+            where not exists (
+                select 1 from {self.src("pos_orders")} o where o.order_id = i.order_id)
+        """)
+        self.invariant(
+            "every order line resolves to a real order",
+            orphans == 0,
+            f"{orphans:,} lines with no header",
+        )
+
     def check_every_sold_batch_exists(self) -> None:
         orphans = self.one(f"""
             select count(*) from {self.src("pos_order_items")} i
@@ -388,6 +409,7 @@ class Gate:
         self.check_stock_never_negative()
         self.check_no_expired_stock_sold()
         self.check_batches_belong_to_the_selling_store()
+        self.check_every_line_has_an_order()
         self.check_every_sold_batch_exists()
         self.check_batch_dates_are_coherent()
         self.check_purchase_orders_are_coherent()

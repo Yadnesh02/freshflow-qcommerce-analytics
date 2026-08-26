@@ -111,6 +111,18 @@ def test_cross_store_fulfilment_is_caught(clean, tmp_path) -> None:
     )
 
 
+def test_an_order_line_with_no_header_is_caught(clean, tmp_path) -> None:
+    """Deleting order headers must go red, not quietly shrink the join."""
+
+    def mutate(frame):
+        return frame.iloc[25:]
+
+    assert (
+        corrupt(clean, tmp_path, "pos_orders", mutate)["every order line resolves to a real order"]
+        == FAIL
+    )
+
+
 def test_an_orphaned_batch_reference_is_caught(clean, tmp_path) -> None:
     def mutate(frame):
         frame.loc[frame.index[:25], "batch_id"] = "BAT-DOES-NOT-EXIST"

@@ -146,6 +146,26 @@ def test_late_arrivals_stay_within_the_documented_lookback(worlds) -> None:
         assert lag.max() <= 2, f"an order arrived {lag.max()} days late"
 
 
+def test_relocating_an_order_never_deletes_it(worlds) -> None:
+    """Regression: the pass used to drop orders it had nowhere to put.
+
+    Rows picked for relocation were removed from their partition before it was
+    known whether the target partition existed, so orders scheduled to land
+    past the end of the run vanished - leaving their item lines pointing at a
+    header that was not there. It cost 87 orders on the 365-day run and no
+    check looked for it, because every existing check joined outward from the
+    lines to batches rather than back to the order.
+    """
+    clean, dirty, _ = worlds
+    before = set(_read(clean, "pos_orders")["order_id"])
+    after = set(_read(dirty, "pos_orders")["order_id"])
+    lost = before - after
+    assert not lost, f"{len(lost):,} orders disappeared during relocation"
+
+    lines = set(_read(dirty, "pos_order_items")["order_id"])
+    assert not lines - after, f"{len(lines - after):,} item lines have no order header"
+
+
 def test_late_arrivals_move_rows_rather_than_inventing_them(worlds) -> None:
     clean, dirty, defects = worlds
     before = len(_read(clean, "pos_orders"))
