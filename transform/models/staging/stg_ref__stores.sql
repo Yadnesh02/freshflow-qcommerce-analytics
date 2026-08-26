@@ -17,8 +17,11 @@ select
     lat,
     lon,
     demand_index,
+    serviceable_radius_km,
     chilled_capacity_units,
     ambient_capacity_units,
+    frozen_capacity_units,
+    daily_operating_hours,
     category_affinity,
     opened_date,
     dt as arrival_date

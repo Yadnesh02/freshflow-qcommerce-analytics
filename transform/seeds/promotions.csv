@@ -1,0 +1,4 @@
+promo_id,promo_type,funding_source,contracted_depth_pct
+PROMO-MD-30,markdown,platform,0.30
+PROMO-MD-50,markdown,platform,0.50
+PROMO-DEAL11,deal_11,brand,

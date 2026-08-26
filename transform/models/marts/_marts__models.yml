@@ -88,6 +88,227 @@ models:
           - unique
           - not_null
 
+  - name: dim_date
+    description: >
+      The calendar, plus the India-specific flags that explain most of the
+      variance in this dataset - salary week, monsoon and the festival cycle.
+      Covers the observed window with a month of history and a quarter of
+      future either side so forecast horizons have rows to join to.
+    columns:
+      - name: date_day
+        description: "Grain and primary key. One row per calendar day, no gaps."
+        data_tests:
+          - unique
+          - not_null
+      - name: week_start_date
+        description: "ISO week, Monday-starting."
+        data_tests:
+          - not_null
+      - name: month_start_date
+        data_tests:
+          - not_null
+      - name: day_name
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+      - name: is_salary_week
+        description: "1st-7th. One of the strongest and most under-modelled signals in Indian retail."
+        data_tests:
+          - not_null
+      - name: is_monsoon
+        description: "Jun-Sep. Orders rise while fresh supply falls."
+        data_tests:
+          - not_null
+      - name: is_ipl_window
+        description: >
+          The IPL season, not the fixture list. Which nights had a match is a
+          coin flip inside the simulator and cannot be recovered by joining -
+          inferring it from the evening demand spike is analysis, not a column.
+        data_tests:
+          - not_null
+      - name: is_festival
+        data_tests:
+          - not_null
+      - name: festival_name
+        description: "Null on non-festival days. Earliest-starting festival wins if two overlap."
+
+  - name: dim_store
+    description: >
+      The 14 dark stores, their catchments and their capacity. Category
+      affinity is unpacked to the three perishable categories the expiry
+      problem lives in; the full nine-key map stays on stg_ref__stores.
+    columns:
+      - name: store_id
+        data_tests:
+          - unique
+          - not_null
+      - name: store_name
+        data_tests:
+          - not_null
+      - name: locality
+        data_tests:
+          - not_null
+      - name: catchment_tier
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["premium", "mid", "mass"]
+      - name: chilled_capacity_share
+        description: >
+          How much of the store's capacity is refrigerated. Bounds what it can
+          hold, and the column whose null exposed the unmerged `defaults` block
+          in stores.yaml.
+        data_tests:
+          - not_null
+      - name: serviceable_radius_km
+        data_tests:
+          - not_null
+      - name: frozen_capacity_units
+        description: "Counted apart from total capacity: a frozen SKU cannot sit in an ambient bay."
+        data_tests:
+          - not_null
+
+  - name: dim_product
+    description: >
+      One row per SKU at current state, taken from its latest catalogue
+      snapshot. Historical cost and price live in dim_product_snapshot -
+      anything asking "what did this cost in March" reads there.
+    columns:
+      - name: sku_id
+        data_tests:
+          - unique
+          - not_null
+      - name: sku_name
+        data_tests:
+          - not_null
+      - name: l1_category
+        data_tests:
+          - not_null
+      - name: temp_zone
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["frozen", "chilled", "ambient"]
+      - name: abc_class
+        description: >
+          Revenue contribution: A produces the first 80%, B the next 15%, C the
+          tail. Inferred from sales, not carried by the catalogue.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["A", "B", "C"]
+      - name: xyz_class
+        description: >
+          Demand predictability by coefficient of variation: X under 0.5, Y
+          under 1.0, Z above. Read with abc_class - an AZ SKU is a different
+          operational problem from a CX one.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["X", "Y", "Z"]
+      - name: has_sales
+        description: "False for the 185 SKUs that never sold, which are classified CZ."
+        data_tests:
+          - not_null
+      - name: base_price
+        data_tests:
+          - not_null
+
+  - name: dim_customer
+    description: >
+      One row per customer from the latest monthly CRM snapshot. Behavioural
+      attributes - RFM, discount dependency, segment - belong to
+      mart_customer_360, which reads behaviour rather than the CRM record.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: home_store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: signup_date
+        data_tests:
+          - not_null
+      - name: signup_cohort_month
+        description: "Derived once here so two retention charts cannot disagree about a cohort."
+        data_tests:
+          - not_null
+      - name: acquisition_channel
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["organic", "paid_social", "referral", "app_store"]
+
+  - name: dim_supplier
+    description: >
+      Suppliers plus an explicit unknown member for SUP-OPENING, the sentinel
+      the batch feed uses for day-one stock. Without that row every supplier
+      rollup is an inner join that silently drops opening inventory.
+    columns:
+      - name: supplier_id
+        data_tests:
+          - unique
+          - not_null
+      - name: supplier_name
+        data_tests:
+          - not_null
+      - name: is_unknown_member
+        description: >
+          True only for SUP-OPENING. Lets an analysis exclude it deliberately
+          instead of by accident.
+        data_tests:
+          - not_null
+      - name: inbound_freshness_pct_mean
+        description: >
+          Mean share of shelf life remaining on arrival. Null on the unknown
+          member. Read next to the minimum - the mean is what contracts are
+          written on, the minimum is what causes the write-off.
+
+  - name: dim_promotion
+    description: >
+      The promo master. Type and funding source come from a seed because no
+      event feed records them; the window and realised depth are observed from
+      the price ledger, so a promo configured one way and executed another
+      shows up as a gap rather than a margin variance nobody can explain.
+    columns:
+      - name: promo_id
+        data_tests:
+          - unique
+          - not_null
+      - name: promo_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["markdown", "deal_11", "bogo", "bundle", "free_delivery"]
+      - name: funding_source
+        description: >
+          Who absorbs the discount. Only platform-funded subsidy enters
+          GM-after-wastage. An assumption, not an observation - see the model.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["brand", "platform"]
+      - name: observed_depth_pct
+        description: "What the ledger actually shows, against the seed's contracted depth."
+      - name: was_ever_run
+        description: "False for a promo in the master that never appeared in the price ledger."
+        data_tests:
+          - not_null
+
 seeds:
   - name: dte_bands
     description: "Source lookup for dim_dte_band."
@@ -95,4 +316,46 @@ seeds:
       - name: band
         data_tests:
           - unique
+          - not_null
+
+  - name: calendar_events
+    description: >
+      Dated events for dim_date - the festival cycle and the IPL season. Public
+      calendar information a retailer would hold, not simulator parameters: it
+      deliberately carries no demand multipliers, because inferring those from
+      emitted events is the forecasting work in Sprint 3 and reading them here
+      would make the result circular. Lunar-calendar dates are approximate.
+    columns:
+      - name: event_name
+        data_tests:
+          - unique
+          - not_null
+      - name: event_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["festival", "sports_season"]
+      - name: start_date
+        data_tests:
+          - not_null
+      - name: duration_days
+        data_tests:
+          - not_null
+
+  - name: promotions
+    description: >
+      Promo master. The commercial attributes of a promotion - what kind it is
+      and who funds it - which no event feed records and a commercial team
+      would maintain by hand.
+    columns:
+      - name: promo_id
+        data_tests:
+          - unique
+          - not_null
+      - name: promo_type
+        data_tests:
+          - not_null
+      - name: funding_source
+        data_tests:
           - not_null

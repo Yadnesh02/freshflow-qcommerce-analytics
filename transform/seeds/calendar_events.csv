@@ -1,0 +1,17 @@
+event_name,event_type,start_date,duration_days
+Ganesh Chaturthi,festival,2025-08-27,11
+Navratri,festival,2025-09-22,9
+Dussehra,festival,2025-10-02,1
+Diwali,festival,2025-10-20,5
+Christmas,festival,2025-12-25,2
+New Year,festival,2026-01-01,2
+Makar Sankranti,festival,2026-01-14,2
+Maha Shivaratri,festival,2026-02-15,1
+Holi,festival,2026-03-03,2
+Gudi Padwa,festival,2026-03-19,1
+Eid al-Fitr,festival,2026-03-20,2
+Ram Navami,festival,2026-03-26,1
+Akshaya Tritiya,festival,2026-04-19,1
+Independence Day,festival,2026-08-15,1
+Raksha Bandhan,festival,2026-08-28,1
+IPL 2026,sports_season,2026-03-20,70

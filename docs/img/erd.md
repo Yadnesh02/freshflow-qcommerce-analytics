@@ -81,7 +81,7 @@ erDiagram
         string  festival_name
         boolean is_salary_week
         boolean is_monsoon
-        boolean is_ipl_matchday
+        boolean is_ipl_window "the season, not the fixture list - see dim_date"
     }
 
     dim_promotion {
@@ -162,7 +162,7 @@ erDiagram
         string  supplier_id PK
         string  supplier_name
         float   lead_time_mean_days
-        float   lead_time_sd
+        float   lead_time_sd_days
         float   otif_rate
         float   inbound_freshness_pct_mean "share of shelf life remaining on arrival"
     }
