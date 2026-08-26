@@ -131,6 +131,43 @@ def test_store_is_well_formed(store: dict) -> None:
         assert cat in cfg.category_names
 
 
+@pytest.mark.parametrize("store", STORES, ids=[s["store_id"] for s in STORES])
+def test_every_store_inherits_the_defaults_block(store: dict) -> None:
+    """Regression: `defaults` in stores.yaml was declared and never merged.
+
+    The file overrides capacity only where a store differs from the network,
+    which is the right way to write it and useless if nothing fills the rest
+    in. Twelve of fourteen stores emitted a null chilled capacity and
+    serviceable_radius_km never reached the feed at all - invisible, because
+    the simulator does not read these values itself. It only surfaced when
+    dim_store tried to compute a capacity share and got null for every store.
+    """
+    for key in (
+        "serviceable_radius_km",
+        "chilled_capacity_units",
+        "ambient_capacity_units",
+        "frozen_capacity_units",
+        "daily_operating_hours",
+    ):
+        assert store.get(key) is not None, f"{store['store_id']} did not inherit {key}"
+
+
+def test_a_store_specific_capacity_still_wins_over_the_default() -> None:
+    """The merge has to be an override, not a blanket overwrite."""
+    raw = yaml.safe_load((CONFIG_DIR / "stores.yaml").read_text(encoding="utf-8"))
+    default = raw["defaults"]["chilled_capacity_units"]
+    overridden = {
+        s["store_id"]: s["chilled_capacity_units"]
+        for s in raw["stores"]
+        if "chilled_capacity_units" in s
+    }
+    assert overridden, "no store overrides chilled capacity - this test proves nothing"
+
+    by_id = {s["store_id"]: s for s in STORES}
+    for store_id, value in overridden.items():
+        assert by_id[store_id]["chilled_capacity_units"] == value != default
+
+
 def test_one_store_opens_mid_window() -> None:
     """A network where every store has a clean 365-day history is unrealistically easy."""
     start, end = cfg.window

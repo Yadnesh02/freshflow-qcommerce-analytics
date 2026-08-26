@@ -272,6 +272,25 @@ def _validate_catalog(catalog: dict[str, Any], categories: tuple[Category, ...])
         )
 
 
+def _apply_store_defaults(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Fill each store from the `defaults` block, per-store values winning.
+
+    stores.yaml declares network-wide capacity, serviceable radius and opening
+    hours once and overrides them only where a store differs - which is the
+    right way to write the file and useless if nothing merges the two halves.
+    Nothing did, so every store that accepted a default emitted a null: 12 of
+    14 with no chilled capacity, 13 with no ambient capacity, and
+    serviceable_radius_km absent from the feed entirely.
+
+    It stayed invisible because the simulator never reads these values itself -
+    they exist to be emitted. It surfaced the first time something downstream
+    tried to use them, when dim_store computed a capacity share and got null
+    for the whole network.
+    """
+    defaults = doc.get("defaults") or {}
+    return [{**defaults, **store} for store in doc["stores"]]
+
+
 def _validate_stores(stores: list[dict[str, Any]], category_names: set[str]) -> None:
     ids = [s["store_id"] for s in stores]
     if len(set(ids)) != len(ids):
@@ -412,14 +431,15 @@ def load_sim_config(config_dir: Path = CONFIG_DIR) -> SimConfig:
 
     names = {c.l1 for c in categories}
     _validate_festivals(calendar, names)
-    _validate_stores(raw["stores"]["stores"], names)
+    stores = _apply_store_defaults(raw["stores"])
+    _validate_stores(stores, names)
     _validate_segments(raw["segments"], names)
     _validate_suppliers(raw["suppliers"], names, categories)
 
     _validate_policies(raw["policies"])
 
     return SimConfig(
-        stores=raw["stores"]["stores"],
+        stores=stores,
         categories=categories,
         calendar=calendar,
         segments=raw["segments"]["segments"],
