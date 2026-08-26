@@ -1,6 +1,66 @@
 version: 2
 
 models:
+  - name: dim_product_snapshot
+    description: >
+      Type 2 slowly changing dimension on landed cost and base price. One row
+      per SKU per period during which neither value changed, so margin on a
+      March order can be computed at March's cost instead of being restated
+      every time merchandising renegotiates. Intervals are half-open,
+      [valid_from_date, valid_to_date), and the newest version of each SKU is
+      left open. Derived from the daily catalogue history rather than
+      accumulated by `dbt snapshot` - the model header sets out why.
+    columns:
+      - name: sku_id
+        description: "Not unique on its own: a SKU has one row per version."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_catalog__products')
+                field: sku_id
+      - name: version_no
+        description: "1-based, ascending by validity. Version 1 is the SKU's first appearance."
+        data_tests:
+          - not_null
+      - name: dbt_scd_id
+        description: >
+          Surrogate key, hashed from sku_id and valid_from_date. Named for
+          dbt's snapshot convention so a future migration to a real snapshot
+          changes nothing downstream.
+        data_tests:
+          - unique
+          - not_null
+      - name: dbt_valid_from
+        description: "Timestamp form of valid_from_date, matching the ERD."
+        data_tests:
+          - not_null
+      - name: dbt_valid_to
+        description: "Timestamp form of valid_to_date. Null on the current version."
+      - name: valid_from_date
+        description: "First day this cost and price were in force. Inclusive."
+        data_tests:
+          - not_null
+      - name: valid_to_date
+        description: "First day they were not. Exclusive, and null on the current version."
+      - name: is_current
+        description: "Exactly one version per SKU is current - asserted by a singular test."
+        data_tests:
+          - not_null
+      - name: days_effective
+        description: "How long this version stood. Never zero: a version spans at least one day."
+        data_tests:
+          - not_null
+      - name: landed_cost
+        description: "Cost as of this version. The column that makes historical margin correct."
+        data_tests:
+          - not_null
+      - name: base_price
+        data_tests:
+          - not_null
+      - name: landed_cost_delta
+        description: "Change from the previous version. Null on version 1 - nothing to change from."
+
   - name: dim_dte_band
     description: >
       Days-to-expiry buckets used to condition price elasticity and to group the
