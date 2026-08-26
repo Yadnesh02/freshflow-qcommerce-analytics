@@ -46,7 +46,9 @@ orders as (
         store_id,
         customer_id,
         order_date_ist,
-        order_ts_ist
+        order_ts_ist,
+        arrival_date as order_arrival_date,
+        arrival_lag_days
     from {{ ref('stg_pos__orders') }}
 
 )
@@ -96,6 +98,20 @@ select
     lines.is_promoted,
     lines.return_reason,
     lines.return_date,
-    lines.arrival_date
+
+    -- Two arrival dates, and the difference matters. `arrival_date` is the
+    -- partition this line landed in; `order_arrival_date` is when its header
+    -- did. Defect 2 moves headers to a later partition and leaves the lines
+    -- where they were, so the two disagree on 62,900 rows.
+    --
+    -- `order_arrival_date` is the one that means "when did this line become
+    -- usable", because a line without its header has no store and no date and
+    -- this model inner-joins on exactly that. Anything replaying history or
+    -- filtering on what had arrived by a point in time has to use it - filter
+    -- on the line's own partition and every late order looks like it was
+    -- always there.
+    lines.arrival_date,
+    orders.order_arrival_date,
+    orders.arrival_lag_days as order_arrival_lag_days
 from lines
 inner join orders on lines.order_id = orders.order_id

@@ -303,6 +303,101 @@ models:
         data_tests:
           - not_null
 
+  - name: agg_store_sku_day
+    description: >
+      One row per store, SKU and day - the table the metric layer reads and the
+      one gate G2 is measured against. Incremental, keyed on the IST event date
+      rather than the arrival partition, reprocessing a 48h lookback so the
+      late arrivals of defect 2 land in the day they belong to. Source rows are
+      read a further 7 days back so the trailing average has a full window;
+      those extra days are dropped before insert.
+    columns:
+      - name: store_sku_day_key
+        description: "Surrogate over the grain. What delete+insert merges on."
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: sku_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: sku_id
+      - name: date_day
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: units_sold
+        description: "Net of returns. Sums to the raw feed exactly - that is G2."
+        data_tests:
+          - not_null
+      - name: net_revenue
+        description: "Net of returns. The denominator of every margin ratio in the registry."
+        data_tests:
+          - not_null
+      - name: cogs
+        data_tests:
+          - not_null
+      - name: opening_units
+        description: "Balance as the day opened, from the ledger replay."
+        data_tests:
+          - not_null
+      - name: closing_units
+        description: "opening_units plus the day's net movement."
+        data_tests:
+          - not_null
+      - name: received_units
+        data_tests:
+          - not_null
+      - name: writeoff_value
+        description: "Landed-cost value written off at expiry. The wastage numerator."
+        data_tests:
+          - not_null
+      - name: markdown_subsidy_platform
+        description: >
+          Discount the platform absorbs, from dim_promotion's funding source.
+          The only subsidy that enters GM-after-wastage.
+        data_tests:
+          - not_null
+      - name: in_stock_pct
+        description: "Time-weighted, from fct_availability_hour. Not a midnight snapshot."
+      - name: is_censored
+        description: "The SKU ran out at some point in the day, so sales understate demand."
+        data_tests:
+          - not_null
+      - name: units_demanded_imputed
+        description: >
+          Baseline uncensoring - observed sales scaled by the share of the day
+          the SKU was sellable. Assumes demand is uniform across the day, which
+          it is not, so it understates lost sales exactly when stockouts land
+          on a demand peak. Sprint 3 replaces it; demand_imputation_method says
+          which estimate a row carries.
+        data_tests:
+          - not_null
+      - name: demand_imputation_method
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["observed", "availability_scaled", "unavailable_all_day"]
+      - name: trailing_7d_avg_units
+        description: >
+          Mean daily units over the previous 7 days, excluding today. The
+          denominator of days-of-cover.
+        data_tests:
+          - not_null
+
   - name: fct_availability_hour
     description: >
       Availability at hourly resolution, held as state intervals rather than a

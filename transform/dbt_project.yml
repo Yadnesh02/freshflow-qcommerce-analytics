@@ -14,6 +14,25 @@ clean-targets: ["target", "dbt_packages"]
 
 require-dbt-version: [">=1.8.0", "<2.0.0"]
 
+vars:
+  # How far back an incremental run reprocesses. Sized against defect 2: the
+  # POS delivers orders up to 48h after they happened, so anything smaller
+  # silently drops 23,232 of them and anything larger just costs time.
+  # assert_late_arrivals_stay_within_the_lookback fails the build if the feed
+  # ever exceeds it.
+  late_arrival_lookback_days: 2
+
+  # The trailing average in agg_store_sku_day needs this much history behind
+  # the oldest day it reprocesses, or the first days of every incremental run
+  # get an average computed from a partial window.
+  trailing_window_days: 7
+
+  # Replay control: pretend only data that had arrived by this date exists.
+  # Null in normal operation. Set it to reproduce a historical run, or to prove
+  # the lookback actually catches late arrivals - which is what the S2.6
+  # acceptance test does.
+  arrival_cutoff_date: null
+
 models:
   freshflow:
     +persist_docs:
