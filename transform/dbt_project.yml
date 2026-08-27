@@ -27,6 +27,12 @@ vars:
   # get an average computed from a partial window.
   trailing_window_days: 7
 
+  # The clickstream outage of defect 8 removed exactly two partitions. Declaring
+  # it here is what lets dq_source_coverage's test pass on the damage we know
+  # about and fail the moment a third day goes missing - a tolerance nobody can
+  # widen by accident, because widening it means editing this line.
+  documented_clickstream_outage_days: 2
+
   # Replay control: pretend only data that had arrived by this date exists.
   # Null in normal operation. Set it to reproduce a historical run, or to prove
   # the lookback actually catches late arrivals - which is what the S2.6

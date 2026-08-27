@@ -311,6 +311,15 @@ models:
       late arrivals of defect 2 land in the day they belong to. Source rows are
       read a further 7 days back so the trailing average has a full window;
       those extra days are dropped before insert.
+    data_tests:
+      # imputed demand can only ever be at or above what actually sold - below
+      # it would mean the correction removed real sales, which is the one way
+      # an uncensoring model can be actively worse than no model at all
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          arguments:
+            column_A: units_demanded_imputed
+            column_B: units_sold
+            or_equal: true
     columns:
       - name: store_sku_day_key
         description: "Surrogate over the grain. What delete+insert merges on."
@@ -372,6 +381,11 @@ models:
           - not_null
       - name: in_stock_pct
         description: "Time-weighted, from fct_availability_hour. Not a midnight snapshot."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
       - name: is_censored
         description: "The SKU ran out at some point in the day, so sales understate demand."
         data_tests:
@@ -444,6 +458,13 @@ models:
           the column that makes intervals equivalent to the dense grid.
         data_tests:
           - not_null
+          # a run shorter than an hour is impossible at this resolution and one
+          # longer than a day would mean an interval crossed midnight, which
+          # would break the per-day tiling the whole model depends on
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 24
       - name: is_in_stock
         data_tests:
           - not_null
@@ -460,6 +481,32 @@ models:
           - not_null
       - name: ran_out_at_hour
         description: "The hour the WMS recorded depletion. Null on a day that never ran short."
+
+  - name: dq_source_coverage
+    description: >
+      One row per source feed per day with the row count that arrived - the
+      freshness and row-count check defect 8 asks for, materialised so the
+      Sprint 5 data-quality page has something to read rather than only a test
+      to trust. Cadence is declared per source, because pos_returns and
+      customer_snapshot do not arrive daily and treating them as gaps would
+      train everyone to ignore this table.
+    columns:
+      - name: source_name
+        data_tests:
+          - not_null
+      - name: date_day
+        data_tests:
+          - not_null
+      - name: row_count
+        data_tests:
+          - not_null
+      - name: is_missing_partition
+        description: >
+          A daily feed with no rows for a day. Nothing errors when this
+          happens - averages just divide by a smaller denominator and return a
+          smaller, plausible number.
+        data_tests:
+          - not_null
 
   - name: fct_price_history
     description: >

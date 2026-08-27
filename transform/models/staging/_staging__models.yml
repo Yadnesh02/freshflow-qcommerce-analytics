@@ -97,10 +97,27 @@ models:
         description: "What the unit actually sold for, after any markdown."
         data_tests:
           - not_null
+          # a sale at or below zero is a giveaway, not a discount; above MRP is
+          # a pricing error. Neither breaks a not_null test.
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 10000
+                strictly: false
       - name: dte_at_sale
         description: "Days to expiry at the moment of sale. Never negative - nothing expired is sold."
         data_tests:
           - not_null
+          # Only the lower bound is a constant, because only the lower bound is
+          # a law: negative means expired stock was sold, which is a G1
+          # invariant. The upper bound is whatever the SKU's own shelf life is
+          # - the catalogue runs to 1,440 days for packaged goods - so it is
+          # asserted per SKU in assert_shelf_life_at_sale_is_possible rather
+          # than as a global number that would need editing every time
+          # merchandising ranges a longer-life product.
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
       - name: row_hash
         data_tests:
           - unique
@@ -184,6 +201,25 @@ models:
         description: "Repaired. A gram or millilitre pack below 1 arrived in kg or L and is rescaled."
         data_tests:
           - not_null
+          # the bound docs/known_data_issues.md names as the catch for defect 4.
+          # Stated per unit of measure, because 0.5 is absurd for a gram pack
+          # and ordinary for a kilo one - a single global bound cannot express
+          # that, which is why the repair went unnoticed in the raw feed.
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 10
+                max_value: 5000
+                row_condition: "uom = 'g'"
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0.1
+                max_value: 20
+                row_condition: "uom in ('kg', 'L')"
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 50
+                max_value: 5000
+                row_condition: "uom = 'ml'"
       - name: pack_qty_was_repaired
         description: "Where the defect 4 rescale fired. Counted against the defect log by the contract test."
         data_tests:

@@ -1,0 +1,8 @@
+# dbt-expectations covers the assertions dbt's four built-in tests cannot
+# express: numeric bounds, distributional shape, and row counts per group.
+# Everything statable with unique / not_null / accepted_values / relationships
+# stays built-in, because a dependency is a cost and those four carry most of
+# the suite.
+packages:
+  - package: metaplane/dbt_expectations
+    version: [">=0.10.0", "<0.11.0"]
