@@ -139,9 +139,14 @@ def t_lint(args: argparse.Namespace) -> int:
     code |= run(
         [sys.executable, "-m", "ruff", "format", "." if args.fix else "--check", "."], check=False
     )
-    if (TRANSFORM / "models").exists() and any((TRANSFORM / "models").rglob("*.sql")):
+    # models AND macros, because that is what CI lints. A local lint narrower
+    # than the CI one is worse than none: it reports green on exactly the files
+    # nobody checked, and the divergence cost three commits of red builds
+    # before anyone looked at why.
+    sql_paths = [d for d in ("models", "macros") if any((TRANSFORM / d).rglob("*.sql"))]
+    if sql_paths:
         code |= run(
-            [sys.executable, "-m", "sqlfluff", "lint", "models"], cwd=TRANSFORM, check=False
+            [sys.executable, "-m", "sqlfluff", "lint", *sql_paths], cwd=TRANSFORM, check=False
         )
     return 1 if code else 0
 

@@ -20,11 +20,16 @@
     join is unambiguous in a way '|' would not be.
 #}
 
-{% macro row_hash(columns) -%}
-    md5(
-        {%- for column in columns %}
-        coalesce(cast({{ column }} as varchar), '\N')
-        {%- if not loop.last %} || chr(31) ||{% endif %}
-        {%- endfor %}
-    )
-{%- endmacro %}
+{#
+    Built by joining the parts in Jinja rather than emitting them across
+    several lines. The multi-line form rendered SQL whose indentation sqlfluff
+    could not follow, and since CI lints macros as well as models, that failed
+    every build for three commits without anything local noticing.
+#}
+{%- macro row_hash(columns) -%}
+    {%- set parts = [] -%}
+    {%- for column in columns -%}
+        {%- do parts.append("coalesce(cast(" ~ column ~ " as varchar), '\\N')") -%}
+    {%- endfor -%}
+    md5({{ parts | join(" || chr(31) || ") }})
+{%- endmacro -%}
