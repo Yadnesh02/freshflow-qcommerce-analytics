@@ -67,7 +67,7 @@ jobs:
         run: uv run python tasks.py build --target ci
 
       - name: Generate dbt docs
-        run: uv run python tasks.py docs --dbt-target ci
+        run: uv run python tasks.py docs --target ci
 
       # dbt writes index.html, manifest.json and catalog.json into target/.
       # Those four files are the whole site; everything else in target/ is

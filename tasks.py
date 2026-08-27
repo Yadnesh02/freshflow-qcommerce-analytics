@@ -296,7 +296,15 @@ TARGETS = {
 }
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI, built separately so tests can validate callers against it.
+
+    CI and the docs workflow invoke this script by string. A flag renamed here
+    breaks them silently - the workflow keeps passing an argument argparse no
+    longer knows, argparse exits 2, and the only place that shows up is a red
+    build. tests/test_task_runner.py parses every invocation out of the
+    workflow files and checks it against this parser.
+    """
     parser = argparse.ArgumentParser(
         prog="tasks.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -320,7 +328,11 @@ def main() -> int:
         if name in ("api", "app"):
             p.add_argument("--port", type=int, default=8000 if name == "api" else 8501)
 
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     # give t_all the flags its children expect
     for attr, default in (
         ("select", None),
