@@ -1,0 +1,102 @@
+name: dbt docs
+
+# Publishes the dbt documentation site - model lineage, every column, every
+# test - to GitHub Pages.
+#
+# **Built in CI, not on a laptop, and that is the point.** dbt docs are
+# generated from a manifest plus a catalog query against a real warehouse, so
+# publishing them by hand means publishing whatever happened to be built on one
+# machine that day. Running it here means the site is regenerated from `main`
+# on every push, is always the documentation for the code that is actually
+# merged, and cannot silently drift from it. It also means the site builds on a
+# clean runner rather than depending on any one developer's environment.
+#
+# It builds against the same 30-day CI slice the test workflow uses. The
+# lineage graph, column descriptions and test coverage are identical either
+# way - only the row counts in the catalog differ, and the site does not claim
+# to be a data profile. docs/data_profile.html is where the full-year numbers
+# live.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages needs these; the default GITHUB_TOKEN is read-only for contents.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two publishes race. Not cancel-in-progress: a half-finished Pages
+# deployment is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Create local directories
+        run: uv run python tasks.py setup
+
+      # The catalog is a real query against a real warehouse - dbt cannot
+      # document columns it has never seen - so the slice has to be built
+      # before docs can be generated.
+      - name: Generate CI dataset
+        run: uv run python tasks.py simulate --days 30 --seed 1
+
+      - name: Build the warehouse
+        run: uv run python tasks.py build --target ci
+
+      - name: Generate dbt docs
+        run: uv run python tasks.py docs --dbt-target ci
+
+      # dbt writes index.html, manifest.json and catalog.json into target/.
+      # Those four files are the whole site; everything else in target/ is
+      # build intermediates nobody should be served.
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+          cp transform/target/index.html site/
+          cp transform/target/manifest.json site/
+          cp transform/target/catalog.json site/
+          cp transform/target/graph.gpickle site/ 2>/dev/null || true
+          test -s site/index.html || { echo "dbt produced no index.html"; exit 1; }
+          test -s site/catalog.json || { echo "dbt produced no catalog.json"; exit 1; }
+          echo "site contents:" && ls -la site/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

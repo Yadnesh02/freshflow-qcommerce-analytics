@@ -24,13 +24,13 @@ takes today's ₹11 deal slot, and which customers to nudge.
 
 ## Status
 
-🚧 **In development.** Sprint 2 of 5 — see [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
+🚧 **In development.** Sprint 3 of 5 — see [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
 
 | Sprint | Scope | State |
 |---|---|---|
 | 0 | Foundations, metric registry, CI | ✅ done |
 | 1 | Simulator & Bronze layer | ✅ done — gate G1 passed |
-| 2 | Warehouse, dbt marts, data quality | in progress |
+| 2 | Warehouse, dbt marts, data quality | ✅ done — gate G2 passed |
 | 3 | Forecast, expiry risk, live app | — |
 | 4 | Decision engine | — |
 | 5 | Impact proof, orchestration, polish | — |
@@ -91,6 +91,7 @@ Run `python tasks.py --help` for the full target list.
 | [Metric dictionary](docs/metrics.md) | 31 metrics, generated from `semantic/metrics.yml` — never hand-edited |
 | [Data profile](docs/data_profile.html) | What a year of the generated network looks like, and the problems inside it |
 | [Known data issues](docs/known_data_issues.md) | The eight defects deliberately injected into the raw layer, and how staging handles each |
+| [dbt docs](https://yadnesh02.github.io/freshflow-qcommerce-analytics/) | Live lineage graph, every model, column and test — regenerated from `main` on every push |
 
 ## Licence
 

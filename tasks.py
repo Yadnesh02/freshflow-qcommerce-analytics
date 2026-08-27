@@ -228,9 +228,13 @@ def t_dagster(_: argparse.Namespace) -> int:
     return run([sys.executable, "-m", "dagster", "dev", "-m", "orchestration.definitions"])
 
 
-def t_docs(_: argparse.Namespace) -> int:
+def t_docs(args: argparse.Namespace) -> int:
     """Generate dbt docs and the metric dictionary."""
-    code = dbt("docs", "generate", check=False)
+    # The catalog is a live query against a warehouse, so docs can only be
+    # generated for a target that has actually been built. CI has the ci slice
+    # and no dev warehouse at all.
+    _ensure_dbt_deps()
+    code = dbt("docs", "generate", "--target", args.dbt_target, check=False)
     gen = ROOT / "semantic" / "generate_docs.py"
     if gen.exists():
         code |= py("-m", "semantic.generate_docs")
@@ -301,6 +305,7 @@ def main() -> int:
         if name in ("build", "all"):
             p.add_argument("--select", default=None, help="dbt node selector")
             p.add_argument("--full-refresh", action="store_true")
+        if name in ("build", "all", "docs"):
             # dest is renamed because the subparser already owns args.target
             p.add_argument(
                 "--target", dest="dbt_target", default="dev", choices=["dev", "ci", "demo"]
