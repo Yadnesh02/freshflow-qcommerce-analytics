@@ -36,8 +36,9 @@ ROOT = Path(__file__).resolve().parent.parent
 WAREHOUSE = Path(
     os.environ.get("FRESHFLOW_WAREHOUSE", ROOT / "data" / "warehouse" / "freshflow.duckdb")
 )
-RAW = ROOT / "data" / "raw"
-MANIFEST = ROOT / "data" / "_manifest" / "dirt.json"
+# same env var tasks.py hands dbt, so a probe run can point tests at a slice
+RAW = Path(os.environ.get("FRESHFLOW_RAW_DIR", ROOT / "data" / "raw"))
+MANIFEST = Path(os.environ.get("FRESHFLOW_MANIFEST", ROOT / "data" / "_manifest" / "dirt.json"))
 
 pytestmark = pytest.mark.needs_warehouse
 
@@ -363,22 +364,33 @@ def test_without_the_conform_the_join_would_have_lost_them_silently(con, defects
 
 # ============================================================== 8. outage
 def test_the_outage_is_left_visible_rather_than_filled(con, defects) -> None:
-    """Two partitions are missing and staging must not paper over them.
+    """Whatever the collector lost, staging must not paper over.
 
     Interpolating would be worse than useless: the collector fell over under
     load, so the missing days are two of the busiest of the year, and any fill
     biases the censored-demand signal downward exactly where stockouts were
     worst. The gap is a fact the S2.7 row-count check has to be able to fail on.
+
+    The expected width comes from the defect log rather than from the constant
+    2, because the outage only fires on a run long enough to have days worth
+    losing - the injector skips it below 60 partitions. CI builds a 30-day
+    slice, where the honest expectation is a gap of zero, and a test hardcoded
+    to 2 would fail there for the wrong reason entirely.
     """
+    expected_missing_days = 2 if "clickstream_outage" in defects else 0
+
     clickstream_days = one(
         con, "select count(distinct event_date_ist) from staging.stg_web__clickstream"
     )
     order_days = one(con, "select count(distinct order_date_ist) from staging.stg_pos__orders")
-    assert order_days - clickstream_days == 2, (
-        "the clickstream outage is no longer two days wide - either staging "
-        "filled it, or the defect changed"
+
+    assert order_days - clickstream_days == expected_missing_days, (
+        f"expected {expected_missing_days} missing clickstream day(s) but found "
+        f"{order_days - clickstream_days} - either staging filled the gap, or the "
+        "defect changed"
     )
-    assert defects["clickstream_outage"]["rows"] > 0
+    if expected_missing_days:
+        assert defects["clickstream_outage"]["rows"] > 0
 
 
 # ======================================================= layer-wide contract

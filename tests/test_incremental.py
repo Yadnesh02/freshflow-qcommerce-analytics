@@ -38,10 +38,17 @@ pytestmark = [pytest.mark.needs_warehouse, pytest.mark.slow]
 MODEL = "agg_store_sku_day"
 LOOKBACK_DAYS = 2
 
+# The target has to match the warehouse the assertions read, or this test
+# rebuilds one database and inspects another - which produces "nothing
+# changed" and looks exactly like a broken lookback. CI builds the ci target;
+# a local run builds dev.
+DBT_TARGET = os.environ.get("FRESHFLOW_DBT_TARGET", "dev")
+RAW_DIR = Path(os.environ.get("FRESHFLOW_RAW_DIR", ROOT / "data" / "raw"))
+
 
 def run_dbt(*args: str) -> None:
     """Invoke dbt for one model, failing loudly with its output on error."""
-    env = {**os.environ, "FRESHFLOW_RAW_DIR": (ROOT / "data" / "raw").as_posix()}
+    env = {**os.environ, "FRESHFLOW_RAW_DIR": RAW_DIR.as_posix()}
     result = subprocess.run(
         [
             sys.executable,
@@ -52,6 +59,8 @@ def run_dbt(*args: str) -> None:
             MODEL,
             "--profiles-dir",
             ".",
+            "--target",
+            DBT_TARGET,
             *args,
         ],
         cwd=TRANSFORM,

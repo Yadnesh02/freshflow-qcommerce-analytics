@@ -720,7 +720,15 @@ def main(argv: list[str] | None = None) -> int:
 
         print()
         defects = DirtInjector(args.out, seed=args.seed, quiet=args.quiet).apply()
-        write_docs(defects, ROOT / "docs" / "known_data_issues.md")
+        # Only the canonical dataset gets to rewrite the committed document.
+        # A short probe run into a scratch directory otherwise republishes
+        # docs/known_data_issues.md from its own defect list - and a 30-day run
+        # never triggers the clickstream outage, so the section documenting it
+        # silently disappears from the repo.
+        if args.out == RAW_DIR:
+            write_docs(defects, ROOT / "docs" / "known_data_issues.md")
+        elif not args.quiet:
+            print(f"\n  (not writing docs/known_data_issues.md - output went to {args.out})")
     return 0
 
 

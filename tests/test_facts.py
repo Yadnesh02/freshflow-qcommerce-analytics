@@ -216,7 +216,7 @@ def test_the_price_fact_records_only_discounted_intervals(con) -> None:
     assert one(con, "select count(*) from marts.fct_price_history where promo_id is null") == 0
 
 
-def test_stacked_promotions_are_flagged_rather_than_double_counted(con) -> None:
+def test_stacked_promotions_are_flagged_rather_than_double_counted(con, full_year) -> None:
     """A markdown and the Rs 11 deal slot on the same ageing SKU.
 
     The interval keeps one primary promotion - the deepest, which is the one

@@ -185,7 +185,7 @@ def test_the_never_sold_skus_are_classified_and_flagged(con) -> None:
     assert misclassified == 0, f"{misclassified} never-sold SKUs are not classified CZ"
 
 
-def test_the_xyz_split_separates_forecastable_from_erratic(con) -> None:
+def test_the_xyz_split_separates_forecastable_from_erratic(con, full_year) -> None:
     """X must actually be steadier than Z, or the class labels are decorative."""
     x_cv, z_cv = con.execute(
         """
@@ -215,12 +215,28 @@ def test_the_calendar_flags_line_up_with_the_festival_seed(con) -> None:
     )
     assert inconsistent == 0
 
-    seeded = one(con, "select count(*) from seeds.calendar_events where event_type = 'festival'")
+    # only festivals whose dates fall inside the calendar's span can land in it;
+    # on a short window most of the seed is simply out of range, which is not
+    # drift and must not read as it
+    seeded_in_range = one(
+        con,
+        """
+        select count(*) from seeds.calendar_events as events
+        where events.event_type = 'festival'
+          and cast(events.start_date as date)
+              <= (select max(date_day) from marts.dim_date)
+          and cast(events.start_date as date) + cast(events.duration_days as integer) - 1
+              >= (select min(date_day) from marts.dim_date)
+        """,
+    )
     landed = one(con, "select count(distinct festival_name) from marts.dim_date where is_festival")
-    assert landed == seeded, f"{seeded - landed} seeded festivals never appear in the calendar"
+    assert landed == seeded_in_range, (
+        f"{seeded_in_range - landed} festivals fall inside the calendar's span but "
+        "never light up a day"
+    )
 
 
-def test_the_ipl_window_comes_from_the_seed_and_lands_in_spring(con) -> None:
+def test_the_ipl_window_comes_from_the_seed_and_lands_in_spring(con, full_year) -> None:
     """The season is reference data, not a literal buried in the model.
 
     It is a window, not a fixture list - which nights actually had a match is a

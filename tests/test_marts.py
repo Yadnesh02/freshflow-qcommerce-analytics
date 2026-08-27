@@ -46,7 +46,7 @@ def one(con, sql: str):
 
 
 # ============================================== dim_product_snapshot (S2.2)
-def test_a_price_change_mid_year_produces_two_versions(con) -> None:
+def test_a_price_change_mid_year_produces_two_versions(con, full_year) -> None:
     """The S2.2 acceptance gate, stated as the plan states it.
 
     A SKU whose cost or price moved once during the year must appear as exactly
@@ -81,7 +81,7 @@ def test_a_price_change_mid_year_produces_two_versions(con) -> None:
     )
 
 
-def test_the_change_lands_inside_the_year_not_on_its_edges(con) -> None:
+def test_the_change_lands_inside_the_year_not_on_its_edges(con, full_year) -> None:
     """'Mid-year' is doing work in the acceptance gate.
 
     A version boundary on the first or last day of the window would be an
@@ -100,7 +100,7 @@ def test_the_change_lands_inside_the_year_not_on_its_edges(con) -> None:
     assert interior > 0, "every version boundary sits on the edge of the window"
 
 
-def test_the_history_is_compressed_not_copied(con) -> None:
+def test_the_history_is_compressed_not_copied(con, full_year) -> None:
     """1,847 versions out of 547,500 daily rows.
 
     If this ratio ever approached 1 the model would be a slower, wider copy of
@@ -114,7 +114,7 @@ def test_the_history_is_compressed_not_copied(con) -> None:
     assert versions > one(con, "select count(distinct sku_id) from staging.stg_catalog__products")
 
 
-def test_joining_the_live_catalogue_instead_would_restate_history(con) -> None:
+def test_joining_the_live_catalogue_instead_would_restate_history(con, full_year) -> None:
     """The whole reason this dimension exists, measured in rupees.
 
     Costs the order book twice: once at the cost that was in force on the day

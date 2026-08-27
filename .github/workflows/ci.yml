@@ -70,4 +70,7 @@ jobs:
       - name: Warehouse contract tests
         env:
           FRESHFLOW_WAREHOUSE: data/warehouse/freshflow_ci.duckdb
+          # the incremental replay test rebuilds a model, so it has to build
+          # the same target the assertions read
+          FRESHFLOW_DBT_TARGET: ci
         run: uv run pytest -m needs_warehouse
