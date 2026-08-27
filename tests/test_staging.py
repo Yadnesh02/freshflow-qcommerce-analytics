@@ -45,11 +45,26 @@ pytestmark = pytest.mark.needs_warehouse
 IST_OFFSET_MINUTES = 330
 
 
+def _bound(connection) -> None:
+    """Cap what a test query may consume.
+
+    dbt gets a memory limit from profiles.yml; these connections got nothing,
+    so a heavy test query could claim the whole machine. On Windows DuckDB does
+    not fail cleanly when it runs out - the process dies with an access
+    violation, which reads like a broken machine rather than a broken query,
+    and cost real time to diagnose as exactly that.
+    """
+    connection.execute("set enable_progress_bar = false")
+    connection.execute("set memory_limit = '4GB'")
+    connection.execute("set threads = 2")
+
+
 @pytest.fixture(scope="module")
 def con():
     if not WAREHOUSE.exists():
         pytest.skip(f"no warehouse at {WAREHOUSE} - run `python tasks.py build`")
     connection = duckdb.connect(str(WAREHOUSE), read_only=True)
+    _bound(connection)
     yield connection
     connection.close()
 

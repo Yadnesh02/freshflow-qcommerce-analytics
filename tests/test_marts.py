@@ -32,11 +32,26 @@ WAREHOUSE = Path(
 pytestmark = pytest.mark.needs_warehouse
 
 
+def _bound(connection) -> None:
+    """Cap what a test query may consume.
+
+    dbt gets a memory limit from profiles.yml; these connections got nothing,
+    so a heavy test query could claim the whole machine. On Windows DuckDB does
+    not fail cleanly when it runs out - the process dies with an access
+    violation, which reads like a broken machine rather than a broken query,
+    and cost real time to diagnose as exactly that.
+    """
+    connection.execute("set enable_progress_bar = false")
+    connection.execute("set memory_limit = '4GB'")
+    connection.execute("set threads = 2")
+
+
 @pytest.fixture(scope="module")
 def con():
     if not WAREHOUSE.exists():
         pytest.skip(f"no warehouse at {WAREHOUSE} - run `python tasks.py build`")
     connection = duckdb.connect(str(WAREHOUSE), read_only=True)
+    _bound(connection)
     yield connection
     connection.close()
 
@@ -129,17 +144,22 @@ def test_joining_the_live_catalogue_instead_would_restate_history(con, full_year
     as_of_sale, at_current_cost = con.execute(
         """
         with sold as (
+            -- pre-aggregated to store-free SKU-days before the range join.
+            -- Feeding 4.26M individual lines into a BETWEEN join against the
+            -- SCD2 table exhausts memory and takes DuckDB down with an access
+            -- violation rather than a clean error. The grain the question
+            -- needs is units per SKU per day, which is ~500k rows.
             select
-                lines.sku_id,
-                orders.order_date_ist as sale_date,
-                lines.signed_qty
-            from staging.stg_pos__order_lines as lines
-            join staging.stg_pos__orders as orders using (order_id)
+                sku_id,
+                date_day as sale_date,
+                sum(signed_qty) as units
+            from marts.fct_order_item
+            group by sku_id, date_day
         )
 
         select
-            sum(sold.signed_qty * historical.landed_cost),
-            sum(sold.signed_qty * current_version.landed_cost)
+            sum(sold.units * historical.landed_cost),
+            sum(sold.units * current_version.landed_cost)
         from sold
         join marts.dim_product_snapshot as historical
             on sold.sku_id = historical.sku_id
