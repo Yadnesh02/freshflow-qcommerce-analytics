@@ -248,20 +248,20 @@ scored as (
         case
             when base.orders_lifetime > 0
                 then cast(ceil(5 * cume_dist() over (
-                    partition by base.orders_lifetime > 0 order by base.recency_days desc
-                )) as integer)
+                        partition by base.orders_lifetime > 0 order by base.recency_days desc
+                    )) as integer)
         end as r_score,
         case
             when base.orders_lifetime > 0
                 then cast(ceil(5 * cume_dist() over (
-                    partition by base.orders_lifetime > 0 order by base.orders_lifetime
-                )) as integer)
+                        partition by base.orders_lifetime > 0 order by base.orders_lifetime
+                    )) as integer)
         end as f_score,
         case
             when base.orders_lifetime > 0
                 then cast(ceil(5 * cume_dist() over (
-                    partition by base.orders_lifetime > 0 order by base.gmv_lifetime
-                )) as integer)
+                        partition by base.orders_lifetime > 0 order by base.gmv_lifetime
+                    )) as integer)
         end as m_score
     from base
     left join first_month

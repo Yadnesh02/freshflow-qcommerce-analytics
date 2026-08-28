@@ -65,11 +65,13 @@ cohorts as (
         -- how many month indices this cohort has actually had the chance to
         -- live through, given where the data stops
         cast(
-            date_diff('month', cohort_month, (select last_full_month_start from bounds))
+            date_diff(
+                'month', cohort_month, (select bounds.last_full_month_start from bounds)
+            )
             as integer
         ) as months_observed
     from {{ ref('mart_customer_360') }}
-    where cohort_month >= (select first_observable_month from bounds)
+    where cohort_month >= (select bounds.first_observable_month from bounds)
     group by cohort_month
 
 ),
@@ -86,7 +88,23 @@ activity as (
     from {{ ref('fct_order') }} as orders
     inner join {{ ref('mart_customer_360') }} as customers
         on orders.customer_id = customers.customer_id
-    group by customers.cohort_month, 2
+    group by
+        customers.cohort_month,
+        cast(
+            date_diff('month', customers.cohort_month, date_trunc('month', orders.date_day))
+            as integer
+        )
+
+),
+
+-- driven off the oldest cohort's observable span rather than a literal: a hard
+-- 0..12 silently stops extending the triangle the month the data outgrows it,
+-- and a chart that stops growing looks like a flat tail rather than a missing one
+indices as (
+
+    select unnest(
+        generate_series(0, (select max(cohorts.months_observed) from cohorts))
+    ) as month_index
 
 ),
 
@@ -100,14 +118,7 @@ grid as (
         cohorts.months_observed,
         cast(indices.month_index as integer) as month_index
     from cohorts
-    cross join (
-        -- driven off the oldest cohort's observable span rather than a literal:
-        -- a hard 0..12 silently stops extending the triangle the month the data
-        -- outgrows it, and a chart that stops growing looks like a flat tail
-        -- rather than a missing one
-        select unnest(generate_series(0, (select max(months_observed) from cohorts)))
-            as month_index
-    ) as indices
+    cross join indices
     where indices.month_index <= cohorts.months_observed
 
 )
