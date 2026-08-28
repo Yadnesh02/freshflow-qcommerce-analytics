@@ -27,6 +27,16 @@ vars:
   # get an average computed from a partial window.
   trailing_window_days: 7
 
+  # Least of a day's demand that must have arrived before a stockout for
+  # scaling the observed sales to be worth doing. Below it the estimator is
+  # dividing a handful of units by a very small number: cells that ran dry at
+  # 01:00 sold 5 units between all 4,233 of them, and scaling those by 147x
+  # would manufacture 733 units of demand out of nothing. 0.10 puts the cut at
+  # 08:00, where 12.9% of the day has arrived and the multiplier is 7.8x.
+  # Thinner cells fall back to the trailing mean, which estimates the day
+  # directly instead of extrapolating from an empty morning.
+  min_arrival_exposure: 0.10
+
   # The clickstream outage of defect 8 removed exactly two partitions. Declaring
   # it here is what lets dq_source_coverage's test pass on the damage we know
   # about and fail the moment a third day goes missing - a tolerance nobody can

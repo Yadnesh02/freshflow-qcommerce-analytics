@@ -38,22 +38,46 @@
     and availability metrics need. Driving from sales alone would silently
     restrict the table to days something sold.
 
-    **`units_demanded_imputed` is a documented placeholder.** It is what
-    `fill_rate` and `lost_sales_units` divide by, so it cannot be null, and the
-    real censored-demand correction is Sprint 3's work. The baseline here
-    scales observed sales by the inverse of the fraction of the day the SKU was
-    actually sellable. That assumes demand is uniform across the day, which it
-    is not - the curve peaks at the morning and evening rushes, and stockouts
-    happen at those peaks precisely because that is when stock runs out. So
-    this baseline *understates* lost sales, systematically, on exactly the days
-    it matters most. `demand_imputation_method` records which estimate a row
-    got so nothing downstream has to guess, and so Sprint 3's model can be
-    compared against it rather than silently replacing it.
+    **`units_demanded_imputed` uncensors by the demand curve, not the clock.**
+    It is what `fill_rate` and `lost_sales_units` divide by, so it cannot be
+    null. A SKU that ran out at 07:00 sold through only 6.7% of that day's
+    demand, not the 29% of the clock that had passed, because almost nobody
+    shops before dawn - so what sold is scaled by the share of demand that had
+    arrived while the shelf still had stock. `agg_intraday_arrival_curve` holds
+    that share per category and hour and carries the reasoning; the previous
+    baseline divided by hours instead and understated lost sales roughly
+    fourfold on morning stockouts, which are the ones a fresh-goods operator
+    cares about most. The correction runs both ways: a 21:00 stockout has seen
+    92% of the day rather than 87.5%, so it is now imputed slightly *lower*.
+
+    Three cases, and `demand_imputation_method` says which one a row got so
+    nothing downstream has to infer it:
+
+      - `observed` - never ran out, so sales are demand.
+      - `arrival_curve_scaled` - the correction above.
+      - `trailing_mean` - the shelf emptied before `min_arrival_exposure` of
+        the day had arrived, so there is too little to scale. Cells that ran
+        dry at 01:00 sold 5 units between all 4,233 of them; multiplying that
+        by 147 would invent demand rather than estimate it. The trailing mean
+        measures the day directly instead, and also covers the out-all-day
+        cells that the old code left imputed at zero - the most censored rows
+        in the table, previously reporting no lost sales at all.
+
+    **The curve is rebuilt in full on every run; this table is not.** So a day
+    written last week carries the imputation the curve gave then, and only the
+    lookback window gets today's. In normal operation that is immaterial - the
+    curve is fitted on a year of events and one more day moves it by a
+    three-hundred-and-sixty-fifth - but it means the two are only guaranteed to
+    agree after `--full-refresh`. If the curve is ever changed deliberately
+    (different source filter, different shrinkage, a new grain), restate this
+    table too, or the column will hold two different definitions of demand
+    separated by an invisible line 48 hours behind the newest day.
 #}
 
 {%- set lookback = var('late_arrival_lookback_days') -%}
 {%- set trailing = var('trailing_window_days') -%}
 {%- set cutoff = var('arrival_cutoff_date') -%}
+{%- set min_exposure = var('min_arrival_exposure') -%}
 
 with bounds as (
 
@@ -157,6 +181,9 @@ availability as (
         sum(hours.hours_in_state) as hours_carried,
         sum(hours.hours_in_state) filter (where hours.is_in_stock) as hours_in_stock,
         max(hours.on_hand_units) as opening_units,
+        -- the same value on every row of the day, so max() is picking it up
+        -- rather than aggregating anything. Null when the day never ran dry.
+        max(hours.ran_out_at_hour) as ran_out_at_hour,
         bool_or(not hours.is_in_stock) as is_censored
     from {{ ref('fct_availability_hour') }} as hours
     cross join bounds
@@ -246,6 +273,9 @@ joined as (
         coalesce(availability.hours_in_stock, 0) as hours_in_stock,
         coalesce(availability.opening_units, 0) as opening_units,
         coalesce(availability.is_censored, false) as is_censored,
+        -- deliberately not coalesced: null is "never ran out", which is not
+        -- the same statement as "ran out at midnight"
+        availability.ran_out_at_hour,
 
         coalesce(browsing.browse_events, 0) as browse_events,
         coalesce(browsing.censored_browse_events, 0) as censored_browse_events
@@ -344,28 +374,47 @@ select
 
     coalesce(with_trailing.trailing_7d_avg_units, 0) as trailing_7d_avg_units,
 
-    -- baseline uncensoring: scale what sold by the share of the day it could
-    -- have sold in. Understates lost sales when the stockout lands on a demand
-    -- peak, which is when stockouts happen - Sprint 3 replaces this.
+    with_trailing.ran_out_at_hour,
+    curve.cumulative_share_before as demand_share_before_stockout,
+
+    -- Uncensoring, in three cases. What sold is scaled up by the share of the
+    -- day's demand that had arrived while the SKU was still sellable - the
+    -- arrival curve, not the clock. `greatest` against units_sold is a floor,
+    -- not a fix: an uncensoring model that returned less than what actually
+    -- sold would be worse than no model, and the schema test enforces it.
     case
-        when not with_trailing.is_censored or with_trailing.hours_in_stock = 0
-            then with_trailing.units_sold
+        when not with_trailing.is_censored then with_trailing.units_sold
+
+        -- Too little of the day arrived before the shelf emptied for scaling
+        -- to mean anything, so estimate the day directly instead. Covers the
+        -- out-all-day cells too, where there is no exposure at all and the
+        -- curve join finds nothing.
+        when
+            coalesce(curve.cumulative_share_before, 0) < {{ min_exposure }}
+            then greatest(
+                    with_trailing.units_sold,
+                    round(coalesce(with_trailing.trailing_7d_avg_units, 0))
+                )
+
         else greatest(
                 with_trailing.units_sold,
-                round(
-                    with_trailing.units_sold
-                    * with_trailing.hours_carried
-                    / cast(with_trailing.hours_in_stock as double)
-                )
+                round(with_trailing.units_sold / curve.cumulative_share_before)
             )
     end as units_demanded_imputed,
     case
         when not with_trailing.is_censored then 'observed'
-        when with_trailing.hours_in_stock = 0 then 'unavailable_all_day'
-        else 'availability_scaled'
+        when coalesce(curve.cumulative_share_before, 0) < {{ min_exposure }}
+            then 'trailing_mean'
+        else 'arrival_curve_scaled'
     end as demand_imputation_method
 from with_trailing
 cross join bounds
 left join {{ ref('dim_product') }} as products
     on with_trailing.sku_id = products.sku_id
+-- the curve is keyed on the hour the shelf emptied, so this finds nothing for
+-- a day that never ran out - which is exactly the rows that do not need it
+left join {{ ref('agg_intraday_arrival_curve') }} as curve
+    on
+        products.l1_category = curve.l1_category
+        and with_trailing.ran_out_at_hour = curve.hour_ist
 where with_trailing.date_day >= bounds.rebuild_from

@@ -227,7 +227,11 @@ metrics:
     format: percent_1dp
     tests:
       - between: [0.0, 1.0]
-    notes: "Depends on the censored-demand imputation in S3.1. Meaningless without it."
+    notes: >
+      Denominator is the arrival-curve imputation from S3.1, not observed
+      sales - so a store that stocked out at 08:00 shows the fill rate its
+      customers experienced rather than 100%. agg_store_sku_day.
+      demand_imputation_method says which estimator each row used.
 
   lost_sales_units:
     label: "Lost Sales (units)"
