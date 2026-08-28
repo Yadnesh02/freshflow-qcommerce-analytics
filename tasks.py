@@ -209,6 +209,11 @@ def t_openapi(_: argparse.Namespace) -> int:
     return py("-m", "serving.api.export_openapi")
 
 
+def t_elasticity(_: argparse.Namespace) -> int:
+    """Estimate price elasticity by category and days-to-expiry band."""
+    return py("-m", "analytics.elasticity.estimate")
+
+
 def t_gate(_: argparse.Namespace) -> int:
     """Run checkpoint gate G1 against the emitted raw layer."""
     return py("-m", "simulator.verify")
@@ -309,6 +314,7 @@ TARGETS = {
     "backtest": t_backtest,
     "forecast": t_forecast,
     "expiry-risk": t_expiry_risk,
+    "elasticity": t_elasticity,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
