@@ -214,6 +214,11 @@ def t_elasticity(_: argparse.Namespace) -> int:
     return py("-m", "analytics.elasticity.estimate")
 
 
+def t_markdown(args: argparse.Namespace) -> int:
+    """Choose markdown depth for every at-risk batch, under a daily budget."""
+    return py("-m", "analytics.optimization.markdown", "--budget", str(args.budget))
+
+
 def t_gate(_: argparse.Namespace) -> int:
     """Run checkpoint gate G1 against the emitted raw layer."""
     return py("-m", "simulator.verify")
@@ -315,6 +320,7 @@ TARGETS = {
     "forecast": t_forecast,
     "expiry-risk": t_expiry_risk,
     "elasticity": t_elasticity,
+    "markdown": t_markdown,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
@@ -358,6 +364,13 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "markdown":
+            p.add_argument(
+                "--budget",
+                type=float,
+                default=1000.0,
+                help="markdown spend cap per store per day, in rupees",
+            )
         if name == "publish-demo":
             p.add_argument(
                 "--dry-run",

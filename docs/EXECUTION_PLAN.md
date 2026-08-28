@@ -180,7 +180,7 @@ This is the sprint that must land. Everything after it is upside.
 | ID | Task | Est | Acceptance gate |
 |---|---|---|---|
 | **S4.1** | Elasticity: log-log with store+SKU fixed effects, clustered SEs, partial pooling for thin SKUs | 3h | Signs are negative; premium categories more elastic than staples |
-| **S4.2** | Markdown optimizer: grid over discount depth, expected-margin objective, cost floor, daily budget | 3h | Deeper discounts chosen for lower DTE and higher on-hand — verify the monotonicity |
+| **S4.2** ✅ | Markdown optimizer: grid over discount depth, expected-margin objective, cost floor, daily budget | 3h | **Met, and the gate needed restating** — monotonicity holds for the objective at a constant elastic coefficient; at the fitted coefficients the optimiser recommends no markdown at all. See G4 below. |
 | **S4.3** | Deal-slot allocator (PuLP IP) with all 5 constraints | 2.5h | Solver returns feasible; PL floor respected |
 | **S4.4** | Transfer optimizer (min-cost flow) with shelf-life feasibility gate | 2.5h | No transfer recommended that can't survive transit |
 | **S4.5** | Newsvendor replenishment with perishable critical ratio | 1.5h | Order-up-to level capped by shelf life |
@@ -197,13 +197,34 @@ This is the sprint that must land. Everything after it is upside.
 |---|---|---|---|
 | **S5.1** | Experiment harness: 30 seeds × 90 days × 2 policies, **common random numbers** | 3h | Same seed reproduces identical demand under both policies — assert it |
 | **S5.2** | Store-level randomized holdout + DiD with parallel-trends check; restrict transfers within arms (SUTVA) | 2.5h | Pre-period trends parallel; DiD estimate with CI |
-| **S5.3** | Sensitivity: elasticity ±30%, forecast error ×1.5, shelf life −1 day | 1.5h | Table of which findings survive |
+| **S5.3** | Sensitivity: elasticity ±30%, forecast error ×1.5, shelf life −1 day, **delivery cost ₹0–₹70/order**, **markdown disposal cost ₹0–₹50/unit** | 2h | Table of which findings survive — and the two conclusions that already do not |
 | **S5.4** | Ablation: B minus each component, attribute the gain | 1.5h | Per-component contribution sums ≈ total |
 | **S5.5** | `mart_experiment_readout` + Executive page readout | 1.5h | Table from plan §10 filled with **real** numbers |
 | **S5.6** | Dagster asset graph, daily schedule, asset checks | 2.5h | `dagster dev` shows the full DAG; screenshot for README |
 | **S5.7** | Streamlit page 6 (Data Quality) + Soda freshness checks | 1.5h | Injected staleness triggers an alert |
 | **S5.8** | `sql_showcase/` — 15 documented queries | 2.5h | Each runs against the warehouse; each has the business question in a comment |
 | **S5.9** | `docs/business_case.pdf` (2 pages), OBS walkthrough video, ADRs, final README | 2.5h | §14 checklist complete |
+
+**Two assumptions are already known to flip a stated conclusion, and S5.3 owns both.**
+Neither is a measurement; each is a single declared parameter that the event stream
+cannot supply, and each is one line in a config rather than buried in a model.
+
+- **Delivery cost, `assumed_delivery_cost_per_order` = ₹42** (`transform/dbt_project.yml`).
+  Contribution by discount-dependency band reorders around it, and the low-DDI and
+  medium-DDI curves cross at **₹28.6** — the figure in use sits 47% above that
+  crossover. So "our least discount-dependent customers are the most valuable" is a
+  statement about the delivery cost, not about the customers. At ₹70 the low-DDI band
+  goes negative outright. `mart_customer_360`'s header carries the full table.
+
+- **Markdown disposal cost, `--disposal-cost` = ₹0/unit** (`analytics/optimization/markdown.py`).
+  At zero, S4.2 recommends **no markdown anywhere** — every fitted elasticity is
+  inelastic, so cutting price loses more on the units that were selling than it wins on
+  the ones it brings in. The first markdowns appear between ₹10 and ₹25 a unit; at ₹50
+  it is 13 batches. Whether markdown pays at all in this business is therefore a
+  statement about disposal cost, and the default of zero is the one the data supports.
+
+Both belong in the same table because they have the same shape: a conclusion that reads
+as a finding is actually a reading of one number nobody measured.
 
 **Sprint 5 DoD:** the full Definition of Done in plan §14.
 
@@ -222,7 +243,7 @@ Vite + React + ECharts against the existing API; deploy front-end on Vercel, API
 | **G1** | End Sprint 1 | On-hand never negative; FEFO strictly oldest-first; every injected defect countable |
 | **G2** | End Sprint 2 | `agg_store_sku_day` revenue ties to raw order totals **exactly**; demo slice < 80 MB |
 | **G3** | End Sprint 3 | Live public URL; **no number on screen that isn't in `metrics.yml`** |
-| **G4** | End Sprint 4 | Markdown depth increases monotonically as DTE falls, holding demand constant |
+| **G4** | End Sprint 4 | Markdown depth increases monotonically as DTE falls, holding the demand **rate** constant — **and the sweep must move**: run at an inelastic coefficient every depth is zero and "non-decreasing" passes while testing nothing. `test_an_inelastic_coefficient_makes_the_g4_sweep_vacuous` holds that shut. |
 | **G5** | End Sprint 5 | Experiment reproducible from a seed; every resume number traceable to `mart_experiment_readout` |
 
 G3 and G5 are the two that matter most. G3 makes you employable-with-a-link. G5 makes every number on your resume defensible.

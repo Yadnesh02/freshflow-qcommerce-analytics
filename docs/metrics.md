@@ -31,7 +31,7 @@ Net revenue per delivered order. Read next to basket size uplift: AOV can rise s
 | **Expected range** | 50 to 5000 |
 | **Owner** | analytics |
 
-> ⚠ mart_order_daily is pre-aggregated to store x day, so orders are summed from a count column rather than counted distinct. Counting DISTINCT order_id here would be a column that does not exist at this grain.
+> ⚠ mart_order_daily is pre-aggregated to store x day, so orders are summed from a count column rather than counted distinct. Counting DISTINCT order_id here would be a column that does not exist at this grain. orders_count is DELIVERED orders. 76,121 headers (4.9%) carry a basket the customer built and no fulfilled line - a total stockout at pick time - and they are excluded because this metric is defined per delivered order. Dividing by every header instead reads Rs 278.29 against Rs 292.56, so the choice moves the tile by 5.1%; mart_order_daily.placed_orders and .unfulfilled_orders carry the other denominator rather than hiding it.
 
 ### `cogs_value` — COGS
 
