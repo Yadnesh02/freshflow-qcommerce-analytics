@@ -195,6 +195,12 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         "mart_expiry_risk": (
             f"select * from source.marts.mart_expiry_risk where store_id in ({store_list})"
         ),
+        "mart_customer_360": (
+            f"select * from source.marts.mart_customer_360 where store_id in ({store_list})"
+        ),
+        # not filtered by store: cohorts are defined across the estate, and a
+        # per-store slice of a cohort is a different cohort with the same name
+        "mart_cohort_retention": "select * from source.marts.mart_cohort_retention",
         "fct_order": (
             f"select * from source.marts.fct_order where store_id in ({store_list}) and {window}"
         ),

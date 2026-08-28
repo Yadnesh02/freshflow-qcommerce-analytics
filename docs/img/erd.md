@@ -353,6 +353,7 @@ erDiagram
         boolean active_curr_90d
         boolean active_prev_90d
         boolean ordered_m1
+        boolean m1_observable "cohort's M1 falls inside the order feed"
         int     orders_90d
         int     promo_orders_90d
         decimal gross_margin_90d

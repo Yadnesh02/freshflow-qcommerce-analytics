@@ -176,11 +176,16 @@ dimensions:
 
   ddi_band:
     label: "Discount Dependency Band"
-    description: "Low / medium / high share of promo-containing orders."
+    description: >
+      Low / medium / high share of promo-containing orders. `no_orders` is a
+      fourth, structural value: a customer with nothing in the trailing 90 days
+      has an undefined ratio rather than a low one, and collapsing them into
+      `low` would credit the least engaged customers with the best discount
+      behaviour.
     key: customer_id
     attribute: ddi_band
     join: {table: mart_customer_360, join_on: customer_id}
-    values: [low, medium, high]
+    values: [low, medium, high, no_orders]
 
   # ---------------------------------------------------------------- promotion
   promo_type:
