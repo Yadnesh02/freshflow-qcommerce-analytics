@@ -135,9 +135,18 @@ def test_the_last_day_is_the_least_elastic_band(con) -> None:
     """The finding S4.2 acts on, and the one that would be easiest to invert.
 
     Shoppers largely will not take stock expiring today at any price, so a
-    deeper cut at 0-1d buys very little; the response is strongest two to five
-    days out. If this ever reversed, the optimiser's whole strategy - mark down
-    earlier rather than harder at the end - would be wrong.
+    deeper cut near expiry buys very little; the response is strongest two to
+    five days out. If this ever reversed, the optimiser's whole strategy - mark
+    down earlier rather than harder at the end - would be wrong.
+
+    Once the bands were made disjoint, 0-1d stopped being identifiable in *any*
+    category - it comes back at -0.16 +/- 0.37 for Dairy and worse elsewhere, on
+    a few hundred observations sitting at one modal discount. So the comparison
+    runs between the nearest band that did find a slope and the peak, and the
+    fact that the last day itself is unmeasurable is asserted rather than
+    skipped past. This test used to `pytest.skip` when 0-1d was missing, which
+    after that change would have made it skip forever - a skip that never
+    expires is the same as a deleted test.
     """
     by_band = dict(
         con.execute(
@@ -149,24 +158,64 @@ def test_the_last_day_is_the_least_elastic_band(con) -> None:
             """
         ).fetchall()
     )
-    if "0-1d" not in by_band or "2-3d" not in by_band:
-        pytest.skip("not both bands identified in this run")
-    assert by_band["0-1d"] > by_band["2-3d"], (
-        f"0-1d elasticity {by_band['0-1d']:.2f} is stronger than 2-3d "
-        f"{by_band['2-3d']:.2f}; the mark-down-earlier conclusion depends on the reverse"
+    assert "0-1d" not in by_band, (
+        "0-1d became identifiable - the claim that the last day cannot be measured "
+        "from observational data no longer holds, and S4.2's docstring says it does"
+    )
+
+    near, peak = "1-2d", "2-3d"
+    assert near in by_band and peak in by_band, (
+        f"neither of the two bands this finding rests on is identified: {sorted(by_band)}"
+    )
+    assert by_band[near] > by_band[peak], (
+        f"{near} elasticity {by_band[near]:.2f} is stronger than {peak} "
+        f"{by_band[peak]:.2f}; the mark-down-earlier conclusion depends on the reverse"
     )
 
 
 def test_elasticities_are_within_a_plausible_range(con) -> None:
-    """A coefficient past -3 on grocery staples is a misspecification, not a finding."""
+    """A coefficient past -3 on grocery staples is a misspecification, not a finding.
+
+    Bounded on the number that leaves this table, not on the raw fit. Once the
+    DTE bands were made disjoint the thin cells stopped being averaged away with
+    their neighbours, and two of them - Fruits & Veg 0-1d on 198 observations,
+    Meat/Fish 0-1d on 698 - produce raw coefficients of +8.60 and +1.61. Those
+    are not misspecification: they are a Poisson fit dividing by a price series
+    with almost no variation in it, and the standard errors say so (3.48 and
+    0.84, intervals nowhere near zero). `is_identified` quarantines both and
+    `elasticity` carries the category coefficient instead.
+
+    So the bound belongs on `elasticity`, which is what any consumer reads, and
+    the raw fits get the weaker guarantee below: implausible is allowed, but only
+    if it was also declared unidentified. Bounding `elasticity_raw` directly
+    would force the estimator to hide thin cells rather than report them.
+    """
     extreme = con.execute(
         """
-        select l1_category, dte_band, elasticity_raw
+        select l1_category, dte_band, elasticity
         from marts.mart_price_elasticity
-        where elasticity_raw < -3 or elasticity_raw > 1
+        where elasticity is not null and (elasticity < -3 or elasticity > 1)
         """
     ).fetchall()
-    assert not extreme, f"implausible coefficients: {extreme}"
+    assert not extreme, f"implausible coefficients handed downstream: {extreme}"
+
+
+def test_an_implausible_raw_fit_is_always_quarantined(con) -> None:
+    """The other half: a wild raw coefficient may exist, but never unflagged.
+
+    This is the test that has to hold for the one above to be safe to relax. A
+    raw fit outside [-3, 1] that came back *identified* would mean the interval
+    cleared zero on a number that cannot be a demand elasticity, and that is a
+    misspecification rather than a thin cell.
+    """
+    leaked = con.execute(
+        """
+        select l1_category, dte_band, elasticity_raw, standard_error
+        from marts.mart_price_elasticity
+        where (elasticity_raw < -3 or elasticity_raw > 1) and is_identified
+        """
+    ).fetchall()
+    assert not leaked, f"implausible coefficients passed identification: {leaked}"
 
 
 def test_standard_errors_are_finite_and_positive(con) -> None:

@@ -15,6 +15,25 @@ monotonically with the DTE band, from 0.998 at 7d+ to 0.500 at 0-1d, so the
 confound is close to total. The estimation is therefore run *within* band, which
 is what the plan asks for and also the only way the coefficient is interpretable.
 
+**The bands have to be disjoint, and `dim_dte_band` is not.** The seed gives
+0-1d as [0,1] and 1-2d as [1,2], so a `between` join puts every store-SKU-day at
+one, two, three, five or seven days out into two cells at once. That is not a
+rounding detail here: the first version of this estimate had a 0-1d cell that was
+**59.5% dte=1 stock** - 15,221 shelf-days of "expires tomorrow" against 10,360 of
+"expires today" - so the headline "response collapses on the last day" was
+substantially a next-to-last-day number, and 1-2d and 2-3d were composed entirely
+of days shared with a neighbour. The bands are now read half-open,
+`[min_days, max_days)`, giving {0}, {1}, {2}, {3,4}, {5,6}, {7+}. S4.2 applies
+them the same way, which is the point - a coefficient fitted on [0,1] and applied
+to {0} is measuring a different population from the one it prices.
+
+    Half-open rather than "lowest sort_order wins", which was the first attempt
+    and is wrong in a way that reads as right. Taking the earliest matching band
+    hands the shared endpoint *downward*, so 0-1d collects {0,1}, 1-2d collects
+    only {2}, 2-3d only {3}, and every label ends up describing the day above
+    its own range. The estimate ran and produced sensible-looking coefficients
+    against silently mislabelled populations.
+
 **Freshness is measured from stock on offer, not from what sold.**
 `dte_at_sale` exists only for units that sold, so a panel keyed on it can never
 contain a day where the price was cut and nobody bought - which is exactly the
@@ -145,7 +164,15 @@ panel as (
         on_offer.date_day,
         on_offer.units_on_hand,
         on_offer.days_to_expiry,
-        bands.dte_band,
+        (
+            select bands.dte_band
+            from marts.dim_dte_band as bands
+            where
+                on_offer.days_to_expiry >= bands.min_days
+                and on_offer.days_to_expiry < bands.max_days
+            order by bands.sort_order
+            limit 1
+        ) as dte_band,
         products.l1_category,
         products.abc_class,
         sales.units_sold,
@@ -158,8 +185,6 @@ panel as (
         calendar.is_festival,
         calendar.is_salary_week
     from on_offer
-    inner join marts.dim_dte_band as bands
-        on on_offer.days_to_expiry between bands.min_days and bands.max_days
     inner join marts.dim_product as products
         on products.sku_id = on_offer.sku_id
     inner join marts.dim_date as calendar
@@ -229,14 +254,26 @@ def fit_cell(frame: pd.DataFrame) -> tuple[float, float, int]:
     Standard errors are clustered on store-SKU: a SKU's residuals are correlated
     across days by everything the model does not see, and unclustered errors
     would make every coefficient look far more certain than it is.
+
+    **Controls with no variation inside the cell are dropped, not fitted.** Once
+    the DTE bands are disjoint, three of them span a single day - 0-1d is {0},
+    1-2d is {1}, 2-3d is {2} - and `days_to_expiry` becomes a constant column
+    sitting next to the intercept. That design is singular: the fit either
+    raises, or returns a coefficient with a NaN standard error, which
+    `is_identified` then reads as "not identified" and the cell disappears into
+    the category. The first disjoint run lost 0-1d, 1-2d and 2-3d entirely for
+    every category this way - the bands with the most discounting in them, and
+    the ones the whole markdown question turns on.
+
+    The control still earns its place in the bands that span more than a day and
+    in every category-level fit, so it is dropped per fit rather than removed.
     """
     design = pd.DataFrame(
         {
             "log_price": np.log(frame["price_ratio"].to_numpy(dtype=float)),
-            # Freshness still varies *inside* a band - 0-1d holds both "expires
-            # tomorrow" and "expires today" - and the deeper cut goes to the
-            # older one, which is also the one shoppers refuse. Without this the
-            # coefficient carries that refusal.
+            # Freshness varies inside the wider bands - 3-5d holds both - and the
+            # deeper cut goes to the older stock, which is also what shoppers
+            # refuse. Without this the coefficient carries that refusal.
             "days_to_expiry": frame["days_to_expiry"].to_numpy(dtype=float),
             # Marked-down stock is by definition what is left. A thin remnant
             # sells less because there is less of it, not because of its price.
@@ -246,6 +283,12 @@ def fit_cell(frame: pd.DataFrame) -> tuple[float, float, int]:
             "is_salary_week": frame["is_salary_week"].astype(int).to_numpy(),
         }
     )
+    constant_controls = [
+        name
+        for name in design.columns
+        if name != "log_price" and design[name].nunique(dropna=False) <= 1
+    ]
+    design = design.drop(columns=constant_controls)
     design = sm.add_constant(design, has_constant="add")
     offset = np.log(frame["baseline_units"].to_numpy(dtype=float))
     groups = (frame["store_id"] + "|" + frame["sku_id"]).to_numpy()

@@ -483,3 +483,57 @@ seeds:
               arguments:
                 min_value: 0
                 max_value: 1
+
+  - name: mart_order_daily
+    description: >
+      Orders per store per day, rolled up from fct_order. The source the aov
+      metric has declared since Sprint 2 and did not have until now, which is
+      why aov was the one executive metric the resolver gate skipped rather
+      than ran. Not derivable from agg_store_sku_day: that table's order_count
+      counts orders per SKU, so it triples the denominator and makes AOV read
+      Rs 102 against a true Rs 278.
+    data_tests:
+      - dbt_expectations.expect_compound_columns_to_be_unique:
+          arguments:
+            column_list: [store_id, date_day]
+    columns:
+      - name: store_day_key
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: date_day
+        data_tests:
+          - not_null
+      - name: orders_count
+        description: >
+          Delivered orders - headers with at least one fulfilled line. The aov
+          denominator, and deliberately not count(*): 76,121 headers were served
+          nothing at all, and including them reads aov as Rs 278.29 against
+          Rs 292.56 on delivered orders.
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+      - name: placed_orders
+        description: "Every header, delivered or not. Always >= orders_count."
+        data_tests:
+          - not_null
+      - name: unfulfilled_orders
+        description: >
+          Headers with a basket and no fulfilled line - a total stockout at pick
+          time. Kept visible so an availability collapse shows up here rather
+          than as aov drifting for no stated reason.
+        data_tests:
+          - not_null
+      - name: net_revenue
+        description: "Net of returns and discounts. Ties to agg_store_sku_day exactly."
+        data_tests:
+          - not_null
