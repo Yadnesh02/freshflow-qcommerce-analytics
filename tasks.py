@@ -204,6 +204,11 @@ def t_expiry_risk(_: argparse.Namespace) -> int:
     return py("-m", "analytics.expiry_risk")
 
 
+def t_openapi(_: argparse.Namespace) -> int:
+    """Write serving/api/openapi.json from the running app definition."""
+    return py("-m", "serving.api.export_openapi")
+
+
 def t_gate(_: argparse.Namespace) -> int:
     """Run checkpoint gate G1 against the emitted raw layer."""
     return py("-m", "simulator.verify")
@@ -309,6 +314,7 @@ TARGETS = {
     "demo-slice": t_demo_slice,
     "publish-demo": t_publish_demo,
     "api": t_api,
+    "openapi": t_openapi,
     "app": t_app,
     "dagster": t_dagster,
     "docs": t_docs,
