@@ -31,7 +31,8 @@ This is the *build* document. [`PROJECT_1_PLAN.md`](PROJECT_1_PLAN.md) is the *w
 > ### ⚠ The one constraint that will bite you: Streamlit Cloud gives the app **1 GB RAM**
 > Your full warehouse is ~1.5 GB. You cannot ship it. Design for this from day one:
 > - The deployed app queries **pre-aggregated marts only** — never `fct_order_item`.
-> - Build a `tasks.py demo-slice` target that emits a **demo warehouse**: 5 stores × 90 days × marts only, target **< 80 MB** (GitHub's per-file hard limit is 100 MB, and Git LFS free tier is only 1 GB bandwidth/month — so stay under 100 MB and commit it plainly).
+> - Build a `tasks.py demo-slice` target that emits a **demo warehouse**: 5 stores × 90 days × marts only, target **< 80 MB**.
+> - **Ship that file as a GitHub Release asset, not in the repo.** `tasks.py publish-demo` uploads it under a fixed `demo-data` tag and pins its sha256 in `serving/demo/manifest.json`; `serving/demo_data.py` fetches and verifies it at startup. Two rejected alternatives, both of which cost more later: committing it adds a permanent ~69 MB blob per rebuild (DuckDB files are not byte-stable, so even a no-op rebuild is a new blob), and Git LFS resolves unreliably on Streamlit Cloud — a pointer file reaching DuckDB fails as a corrupt database at container startup, which is the worst place to find out.
 > - Full 14-store / 365-day warehouse stays local and gitignored; it's what you run the experiment on.
 >
 > Getting this wrong means discovering at Sprint 3 that your app won't deploy. Build the demo slice in Sprint 2.

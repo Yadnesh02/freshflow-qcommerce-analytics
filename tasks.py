@@ -183,7 +183,16 @@ def t_demo_slice(_: argparse.Namespace) -> int:
         print(f"  demo warehouse: {mb:.1f} MB  {flag} (limit 80 MB)")
         if mb >= 80:
             return 1
+        # the slice is gitignored - building it locally does not change what the
+        # deployed app reads until it is published
+        print("  next: `python tasks.py publish-demo` to make this the deployed build")
     return code
+
+
+def t_publish_demo(args: argparse.Namespace) -> int:
+    """Upload the demo warehouse to its GitHub Release and update the manifest."""
+    extra = ["--dry-run"] if args.dry_run else []
+    return py("-m", "serving.publish_demo", *extra)
 
 
 def t_gate(_: argparse.Namespace) -> int:
@@ -287,6 +296,7 @@ TARGETS = {
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
+    "publish-demo": t_publish_demo,
     "api": t_api,
     "app": t_app,
     "dagster": t_dagster,
@@ -325,6 +335,12 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "publish-demo":
+            p.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="hash the slice and print the manifest without uploading",
+            )
         if name in ("api", "app"):
             p.add_argument("--port", type=int, default=8000 if name == "api" else 8501)
 

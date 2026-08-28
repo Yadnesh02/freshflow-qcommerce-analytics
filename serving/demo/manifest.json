@@ -1,0 +1,8 @@
+{
+  "filename": "freshflow_demo.duckdb",
+  "url": "https://github.com/Yadnesh02/freshflow-qcommerce-analytics/releases/download/demo-data/freshflow_demo.duckdb",
+  "sha256": "727e0f129c3b7346cea9f920a590c23d0c96d50c5cc92121520f0e8644ba9cf5",
+  "bytes": 73150464,
+  "built_at": "2026-08-28T04:57:24Z",
+  "tag": "demo-data"
+}

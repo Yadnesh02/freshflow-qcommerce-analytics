@@ -3,8 +3,11 @@ data/
 *.duckdb
 *.duckdb.wal
 *.parquet
-# the deployment slice IS committed - it is what Streamlit Cloud reads
-!serving/demo/freshflow_demo.duckdb
+# The deployment slice is NOT committed. It ships as a GitHub Release asset and
+# serving/demo_data.py fetches it; serving/demo/manifest.json pins the hash.
+# Rationale in serving/demo_data.py - short version: DuckDB files are not
+# byte-stable, so every rebuild would add a permanent ~69 MB blob to history.
+serving/demo/.cache/
 
 # ---- python ----
 __pycache__/
