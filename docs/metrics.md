@@ -206,7 +206,7 @@ Units fulfilled as a share of units demanded. Uses imputed demand, so it counts 
 | **Expected range** | 0.0 to 1.0 |
 | **Owner** | analytics |
 
-> ⚠ Depends on the censored-demand imputation in S3.1. Meaningless without it.
+> ⚠ Denominator is the arrival-curve imputation from S3.1, not observed sales - so a store that stocked out at 08:00 shows the fill rate its customers experienced rather than 100%. agg_store_sku_day. demand_imputation_method says which estimator each row used.
 
 ### `in_stock_pct` — In-Stock %
 
@@ -412,11 +412,11 @@ Share of net revenue from platform-owned brands. Read alongside cannibalization:
 
 ### `contribution_per_customer` — Contribution per Customer (90d)
 
-Gross margin less delivery cost and promotional subsidy, per active customer. The number that reveals whether discount-driven GMV is profitable at all.
+Gross margin less delivery cost, per active customer. The number that reveals whether discount-driven GMV is profitable at all. Subsidy is not subtracted: gross_margin is computed from the realized (post-discount) price, so the discount is already inside it and taking it off again double-charged it - 11.7% of total contribution, concentrated on exactly the discount-heavy customers this metric compares.
 
 | | |
 |---|---|
-| **Formula** | `SUM(gross_margin_90d - delivery_cost_90d - subsidy_90d)`<br>&nbsp;&nbsp;÷&nbsp;`NULLIF(COUNT(DISTINCT customer_id), 0)` |
+| **Formula** | `SUM(gross_margin_90d - delivery_cost_90d)`<br>&nbsp;&nbsp;÷&nbsp;`NULLIF(COUNT(DISTINCT customer_id), 0)` |
 | **Source** | `mart_customer_360` |
 | **Grain** | `store`, `customer_segment`, `ddi_band` |
 | **Format** | `inr` |
@@ -440,11 +440,11 @@ Share of a customer's trailing-90-day orders containing a promotional item. High
 
 ### `repeat_rate` — Repeat Rate
 
-Share of active customers with more than one order in the period.
+Share of active customers with more than one order in the period. The denominator counts active customers, matching that sentence: dividing by the whole base instead would blend repeat behaviour with the lapse rate and move whenever acquisition moved, which is a different question.
 
 | | |
 |---|---|
-| **Formula** | `COUNT(DISTINCT CASE WHEN orders_90d > 1 THEN customer_id END)`<br>&nbsp;&nbsp;÷&nbsp;`NULLIF(COUNT(DISTINCT customer_id), 0)` |
+| **Formula** | `COUNT(DISTINCT CASE WHEN orders_90d > 1 THEN customer_id END)`<br>&nbsp;&nbsp;÷&nbsp;`NULLIF(COUNT(DISTINCT CASE WHEN orders_90d > 0 THEN customer_id END), 0)` |
 | **Source** | `mart_customer_360` |
 | **Grain** | `store`, `customer_segment` |
 | **Format** | `percent_1dp` |
@@ -468,11 +468,11 @@ Share of customers active in the trailing 90 days who were also active in the pr
 
 ### `retention_m1` — M1 Cohort Retention
 
-Share of a signup cohort that ordered again in their first full month.
+Share of a signup cohort that ordered again in their first full month. Denominator counts only cohorts whose M1 falls inside the order feed: signups start 18 months before orders do, and without the guard those cohorts report a clean 0.0 that passes every range test while describing the dataset rather than the customers.
 
 | | |
 |---|---|
-| **Formula** | `COUNT(DISTINCT CASE WHEN ordered_m1 THEN customer_id END)`<br>&nbsp;&nbsp;÷&nbsp;`NULLIF(COUNT(DISTINCT customer_id), 0)` |
+| **Formula** | `COUNT(DISTINCT CASE WHEN ordered_m1 THEN customer_id END)`<br>&nbsp;&nbsp;÷&nbsp;`NULLIF(COUNT(DISTINCT CASE WHEN m1_observable THEN customer_id END), 0)` |
 | **Source** | `mart_customer_360` |
 | **Grain** | `cohort_month` |
 | **Format** | `percent_1dp` |

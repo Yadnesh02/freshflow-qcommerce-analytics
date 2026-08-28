@@ -359,3 +359,127 @@ seeds:
       - name: funding_source
         data_tests:
           - not_null
+
+  - name: mart_customer_360
+    description: >
+      One row per customer: RFM scores and segment, cohort, discount dependency
+      and 90-day contribution. Frequency and monetary are lifetime figures
+      rather than 90-day ones, because recency and a 90-day order count are two
+      readings of the same window (correlation -0.55) and scoring both from it
+      makes the at_risk segment unreachable. delivery_cost_90d is a declared
+      assumption from assumed_delivery_cost_per_order, not a measurement, and
+      the contribution ranking by DDI band turns on it - see the model header.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: cohort_month
+        data_tests:
+          - not_null
+      - name: customer_segment
+        description: "RF grid position, named for the action it implies."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - champion
+                  - loyal
+                  - promising
+                  - at_risk
+                  - hibernating
+                  - needs_attention
+                  - never_ordered
+      - name: ddi_band
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["low", "medium", "high", "no_orders"]
+      - name: discount_dependency_index
+        description: "Share of trailing-90d orders containing a promotional item."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: r_score
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 5
+      - name: f_score
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 5
+      - name: m_score
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 5
+      - name: orders_90d
+        data_tests:
+          - not_null
+      - name: promo_orders_90d
+        data_tests:
+          - not_null
+      - name: gross_margin_90d
+        data_tests:
+          - not_null
+      - name: delivery_cost_90d
+        description: "orders_90d times a declared per-order assumption. Not measured."
+        data_tests:
+          - not_null
+      - name: subsidy_90d
+        data_tests:
+          - not_null
+      - name: active_curr_90d
+        data_tests:
+          - not_null
+      - name: active_prev_90d
+        data_tests:
+          - not_null
+      - name: ordered_m1
+        data_tests:
+          - not_null
+
+  - name: mart_cohort_retention
+    description: >
+      Signup cohort by month index: the triangle. Order-based, measured against
+      each cohort's full size including members who never ordered, and cut at
+      both ends - cohorts predating the order feed are excluded entirely, and no
+      row exists past months_observed. Peaks at M1 rather than M0 because
+      cohorts key on signup month.
+    data_tests:
+      - dbt_expectations.expect_compound_columns_to_be_unique:
+          arguments:
+            column_list: [cohort_month, month_index]
+    columns:
+      - name: cohort_month
+        data_tests:
+          - not_null
+      - name: month_index
+        data_tests:
+          - not_null
+      - name: cohort_size
+        data_tests:
+          - not_null
+      - name: retention_rate
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1

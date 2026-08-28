@@ -13,13 +13,14 @@ computed on the slice equals the same metric computed on the full warehouse
 restricted the same way, and `tests/test_demo_slice.py` asserts exactly that
 rather than trusting it.
 
-**Rebuilding is not free, and the file is committed.** DuckDB's storage layout
-is not byte-stable: rebuilding from identical data produces a different file,
-and the size drifts by a few hundred KB run to run. Because the slice ships
-inside the repository, every rebuild that gets committed adds a fresh ~68 MB
-blob to git history permanently, whether or not a single row changed. Rebuild
-it when the warehouse data actually changes - not as part of a routine build -
-and if it starts changing often, move it to Git LFS before the history does.
+**Rebuilding is not free, which is why the file is not committed.** DuckDB's
+storage layout is not byte-stable: rebuilding from identical data produces a
+different file, and the size drifts by a few hundred KB run to run. Committed,
+that would add a fresh ~68 MB blob to git history on every rebuild, whether or
+not a single row changed - and history only grows. So the slice is gitignored
+and ships as a GitHub Release asset instead; `serving/publish_demo.py` uploads
+it and `serving/demo_data.py` fetches it. Building locally does not change what
+the deployed app reads until you run `python tasks.py publish-demo`.
 
 **What gets cut, and why that is a modelling decision rather than a filter.**
 Slicing by store and day alone does not fit: 5 of 14 stores over 90 of 365 days
@@ -86,7 +87,7 @@ PRUNED = {
 # Left out on purpose, with the reason. See the module docstring.
 EXCLUDED = {
     "fct_inventory_movement": "audit ledger; its derived figures are already in the batch and daily marts",
-    "fct_clickstream": "feeds the Sprint 3 imputation at build time; the app reads the result, not the evidence",
+    "fct_clickstream": "1.7M raw events behind the imputation; the app ships the fitted curve instead",
 }
 
 
@@ -182,6 +183,24 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         "agg_store_sku_day": (
             f"select * from source.marts.agg_store_sku_day where store_id in ({store_list}) and {window}"
         ),
+        # 288 rows, and not filtered by store or window: it is fitted on the
+        # whole year across all stores, and a slice of it would be a different
+        # curve. This is the evidence behind every lost-sales number the app
+        # shows - shipping the conclusion without it would make the headline
+        # figure unauditable by the person reading it.
+        "agg_intraday_arrival_curve": "select * from source.marts.agg_intraday_arrival_curve",
+        # the action queue the app is built around. Filtered to the demo stores
+        # but not to the window: it is a single as-of snapshot, and slicing a
+        # snapshot by date range would empty it.
+        "mart_expiry_risk": (
+            f"select * from source.marts.mart_expiry_risk where store_id in ({store_list})"
+        ),
+        "mart_customer_360": (
+            f"select * from source.marts.mart_customer_360 where store_id in ({store_list})"
+        ),
+        # not filtered by store: cohorts are defined across the estate, and a
+        # per-store slice of a cohort is a different cohort with the same name
+        "mart_cohort_retention": "select * from source.marts.mart_cohort_retention",
         "fct_order": (
             f"select * from source.marts.fct_order where store_id in ({store_list}) and {window}"
         ),

@@ -30,7 +30,6 @@ DATA_DIRS = [DATA / "raw", DATA / "warehouse", DEMO.parent]
 # targets that are not built yet - each is claimed by a task in docs/EXECUTION_PLAN.md
 PENDING = {
     "simulate": "S1.7",
-    "forecast": "S3.3",
     "recommend": "S4.6",
     "experiment": "S5.1",
     "demo-slice": "S2.8",
@@ -183,7 +182,31 @@ def t_demo_slice(_: argparse.Namespace) -> int:
         print(f"  demo warehouse: {mb:.1f} MB  {flag} (limit 80 MB)")
         if mb >= 80:
             return 1
+        # the slice is gitignored - building it locally does not change what the
+        # deployed app reads until it is published
+        print("  next: `python tasks.py publish-demo` to make this the deployed build")
     return code
+
+
+def t_publish_demo(args: argparse.Namespace) -> int:
+    """Upload the demo warehouse to its GitHub Release and update the manifest."""
+    extra = ["--dry-run"] if args.dry_run else []
+    return py("-m", "serving.publish_demo", *extra)
+
+
+def t_backtest(_: argparse.Namespace) -> int:
+    """Rolling-origin backtest of the baselines; WAPE by ABC-XYZ class."""
+    return py("-m", "analytics.forecasting.backtest")
+
+
+def t_expiry_risk(_: argparse.Namespace) -> int:
+    """Score every open batch for expiry risk and value at risk."""
+    return py("-m", "analytics.expiry_risk")
+
+
+def t_openapi(_: argparse.Namespace) -> int:
+    """Write serving/api/openapi.json from the running app definition."""
+    return py("-m", "serving.api.export_openapi")
 
 
 def t_gate(_: argparse.Namespace) -> int:
@@ -283,11 +306,15 @@ TARGETS = {
     "gate": t_gate,
     "profile": t_profile,
     "lint": t_lint,
+    "backtest": t_backtest,
     "forecast": t_forecast,
+    "expiry-risk": t_expiry_risk,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
+    "publish-demo": t_publish_demo,
     "api": t_api,
+    "openapi": t_openapi,
     "app": t_app,
     "dagster": t_dagster,
     "docs": t_docs,
@@ -325,6 +352,12 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "publish-demo":
+            p.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="hash the slice and print the manifest without uploading",
+            )
         if name in ("api", "app"):
             p.add_argument("--port", type=int, default=8000 if name == "api" else 8501)
 

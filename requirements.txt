@@ -1,0 +1,24 @@
+# Runtime dependencies for the deployed Streamlit app, and nothing else.
+#
+# Streamlit Community Cloud installs from this file. It is deliberately not the
+# project's dependency set: dbt, LightGBM, Dagster, scipy, sklearn and the
+# simulator's packages are all *build* time. They produce the warehouse; they
+# are never imported by a page. Installing them would add several hundred MB
+# and minutes of cold start to a container that has 1 GB and needs neither.
+#
+# tests/test_deployment.py derives the deployed import closure from the page
+# files and fails if this list drifts from it in either direction - a missing
+# package breaks the app, and an extra one is dead weight nobody notices.
+#
+# Pinned exactly. A portfolio app that a recruiter opens in six months should
+# render the same as it does today, and a silent minor upgrade on a rebuild is
+# the most likely way for that to stop being true.
+
+duckdb==1.5.5
+fastapi==0.141.1
+httpx==0.28.1
+pandas==3.0.5
+plotly==6.9.0
+pydantic==2.13.4
+pyyaml==6.0.3
+streamlit==1.62.0

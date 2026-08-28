@@ -392,23 +392,95 @@ models:
           - not_null
       - name: units_demanded_imputed
         description: >
-          Baseline uncensoring - observed sales scaled by the share of the day
-          the SKU was sellable. Assumes demand is uniform across the day, which
-          it is not, so it understates lost sales exactly when stockouts land
-          on a demand peak. Sprint 3 replaces it; demand_imputation_method says
-          which estimate a row carries.
+          Demand after uncensoring - observed sales scaled by the share of the
+          day's demand that had arrived while the SKU was still sellable, from
+          agg_intraday_arrival_curve. Scaling by the arrival curve rather than
+          by hours is what stops a 07:00 stockout being credited with 29% of
+          the day when it saw 6.7%. Never below units_sold, which the
+          model-level pair test enforces. demand_imputation_method says which
+          of the three estimates a row carries.
         data_tests:
           - not_null
+      - name: ran_out_at_hour
+        description: >
+          IST hour the shelf emptied, null when the day never ran out. The key
+          the arrival curve is joined on, published so a reader can rederive
+          the imputation rather than take it on trust.
+      - name: demand_share_before_stockout
+        description: >
+          Share of the day's demand that had arrived before ran_out_at_hour,
+          for this SKU's category. The divisor behind units_demanded_imputed;
+          null on days that never ran out, and on the thin cells that fell back
+          to the trailing mean.
       - name: demand_imputation_method
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ["observed", "availability_scaled", "unavailable_all_day"]
+                values: ["observed", "arrival_curve_scaled", "trailing_mean"]
       - name: trailing_7d_avg_units
         description: >
           Mean daily units over the previous 7 days, excluding today. The
           denominator of days-of-cover.
+        data_tests:
+          - not_null
+
+  - name: agg_intraday_arrival_curve
+    description: >
+      Share of a day's demand arriving in each IST hour, per l1_category - the
+      divisor behind agg_store_sku_day.units_demanded_imputed. Fitted from
+      in-stock pdp_view events only, because notify_me fires exclusively when
+      stock is absent and an out-of-stock view records when a stockout ran
+      rather than when demand arrives. Per-category curves are shrunk toward
+      the global one by the share of their deviation that sampling noise cannot
+      explain, so thin categories cannot buy a distinctive curve with noise.
+      Grain: 12 categories x 24 hours.
+    columns:
+      - name: l1_category
+        data_tests:
+          - not_null
+      - name: hour_ist
+        description: "Hour of the IST day, 0-23."
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 23
+      - name: arrival_share
+        description: >
+          Share of the category's daily demand arriving in this hour. Sums to
+          exactly 1 across the 24 rows of a category.
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: cumulative_share_before
+        description: >
+          Share arriving strictly before this hour - what a stockout at this
+          hour had already seen. Zero at hour 0 by construction.
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: signal_weight
+        description: >
+          How much of its own shape the category earned, 0 to 1. Identical
+          across a category's 24 rows. Low means the curve is mostly the global
+          fallback because the category was too thin to distinguish signal from
+          sampling noise.
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: category_events
+        description: "In-stock pdp_view events the category's curve was fitted on."
         data_tests:
           - not_null
 

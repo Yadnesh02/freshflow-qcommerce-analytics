@@ -1,0 +1,16 @@
+# Streamlit Community Cloud reads this at startup.
+
+[theme]
+base = "light"
+primaryColor = "#2a9d8f"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f6f8"
+textColor = "#1d2b35"
+
+[server]
+# The demo warehouse is fetched once per container from a GitHub Release and
+# cached on local disk; nothing here is uploaded by a user.
+maxUploadSize = 5
+
+[browser]
+gatherUsageStats = false

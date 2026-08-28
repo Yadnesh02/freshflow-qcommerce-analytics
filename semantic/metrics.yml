@@ -227,7 +227,11 @@ metrics:
     format: percent_1dp
     tests:
       - between: [0.0, 1.0]
-    notes: "Depends on the censored-demand imputation in S3.1. Meaningless without it."
+    notes: >
+      Denominator is the arrival-curve imputation from S3.1, not observed
+      sales - so a store that stocked out at 08:00 shows the fill rate its
+      customers experienced rather than 100%. agg_store_sku_day.
+      demand_imputation_method says which estimator each row used.
 
   lost_sales_units:
     label: "Lost Sales (units)"
@@ -439,12 +443,17 @@ metrics:
 
   retention_m1:
     label: "M1 Cohort Retention"
-    description: "Share of a signup cohort that ordered again in their first full month."
+    description: >
+      Share of a signup cohort that ordered again in their first full month.
+      Denominator counts only cohorts whose M1 falls inside the order feed:
+      signups start 18 months before orders do, and without the guard those
+      cohorts report a clean 0.0 that passes every range test while describing
+      the dataset rather than the customers.
     family: customer
     type: ratio
     source: mart_customer_360
     numerator: "COUNT(DISTINCT CASE WHEN ordered_m1 THEN customer_id END)"
-    denominator: "NULLIF(COUNT(DISTINCT customer_id), 0)"
+    denominator: "NULLIF(COUNT(DISTINCT CASE WHEN m1_observable THEN customer_id END), 0)"
     grain: [cohort_month]
     format: percent_1dp
     tests:
@@ -452,12 +461,16 @@ metrics:
 
   repeat_rate:
     label: "Repeat Rate"
-    description: "Share of active customers with more than one order in the period."
+    description: >
+      Share of active customers with more than one order in the period. The
+      denominator counts active customers, matching that sentence: dividing by
+      the whole base instead would blend repeat behaviour with the lapse rate
+      and move whenever acquisition moved, which is a different question.
     family: customer
     type: ratio
     source: mart_customer_360
     numerator: "COUNT(DISTINCT CASE WHEN orders_90d > 1 THEN customer_id END)"
-    denominator: "NULLIF(COUNT(DISTINCT customer_id), 0)"
+    denominator: "NULLIF(COUNT(DISTINCT CASE WHEN orders_90d > 0 THEN customer_id END), 0)"
     grain: [store, customer_segment]
     format: percent_1dp
     tests:
@@ -483,13 +496,16 @@ metrics:
   contribution_per_customer:
     label: "Contribution per Customer (90d)"
     description: >
-      Gross margin less delivery cost and promotional subsidy, per active
-      customer. The number that reveals whether discount-driven GMV is
-      profitable at all.
+      Gross margin less delivery cost, per active customer. The number that
+      reveals whether discount-driven GMV is profitable at all. Subsidy is not
+      subtracted: gross_margin is computed from the realized (post-discount)
+      price, so the discount is already inside it and taking it off again
+      double-charged it - 11.7% of total contribution, concentrated on exactly
+      the discount-heavy customers this metric compares.
     family: customer
     type: ratio
     source: mart_customer_360
-    numerator: "SUM(gross_margin_90d - delivery_cost_90d - subsidy_90d)"
+    numerator: "SUM(gross_margin_90d - delivery_cost_90d)"
     denominator: "NULLIF(COUNT(DISTINCT customer_id), 0)"
     grain: [store, customer_segment, ddi_band]
     format: inr

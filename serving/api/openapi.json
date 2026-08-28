@@ -1,0 +1,675 @@
+{
+  "components": {
+    "schemas": {
+      "ExpiryAction": {
+        "description": "One row of the ranked action queue.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "days_to_expiry": {
+            "title": "Days To Expiry",
+            "type": "integer"
+          },
+          "expiry_date": {
+            "title": "Expiry Date",
+            "type": "string"
+          },
+          "expiry_risk_score": {
+            "title": "Expiry Risk Score",
+            "type": "number"
+          },
+          "l1_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L1 Category"
+          },
+          "qty_remaining": {
+            "title": "Qty Remaining",
+            "type": "number"
+          },
+          "risk_state": {
+            "title": "Risk State",
+            "type": "string"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "sku_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Name"
+          },
+          "store_id": {
+            "title": "Store Id",
+            "type": "string"
+          },
+          "units_at_risk": {
+            "title": "Units At Risk",
+            "type": "number"
+          },
+          "value_at_risk_inr": {
+            "title": "Value At Risk Inr",
+            "type": "number"
+          }
+        },
+        "required": [
+          "batch_id",
+          "store_id",
+          "sku_id",
+          "expiry_date",
+          "days_to_expiry",
+          "qty_remaining",
+          "units_at_risk",
+          "expiry_risk_score",
+          "value_at_risk_inr",
+          "risk_state"
+        ],
+        "title": "ExpiryAction",
+        "type": "object"
+      },
+      "ExpiryQueueResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryAction"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ExpiryQueueResponse",
+        "type": "object"
+      },
+      "FreshnessResponse": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceFreshness"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale_sources": {
+            "title": "Stale Sources",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "sources",
+          "stale_sources",
+          "meta"
+        ],
+        "title": "FreshnessResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MetricDefinition": {
+        "description": "The registry entry, as published. What the number was supposed to mean.",
+        "properties": {
+          "denominator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Denominator"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "grain": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Grain",
+            "type": "array"
+          },
+          "guarded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Metric that must be read alongside this one. The north star can be moved by starving stores of stock, which shows up as churn rather than failure.",
+            "title": "Guarded By"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "numerator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numerator"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "description",
+          "family",
+          "type",
+          "source",
+          "grain",
+          "format",
+          "direction",
+          "owner"
+        ],
+        "title": "MetricDefinition",
+        "type": "object"
+      },
+      "MetricResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "MetricResponse",
+        "type": "object"
+      },
+      "ResponseMeta": {
+        "properties": {
+          "cached": {
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "metric_definition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricDefinition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "params": {
+            "description": "Filter values, bound rather than interpolated.",
+            "items": {},
+            "title": "Params",
+            "type": "array"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "sql": {
+            "description": "The exact statement executed. Shown behind 'see query'.",
+            "title": "Sql",
+            "type": "string"
+          },
+          "warnings": {
+            "description": "Valid but worth knowing - a slice outside the metric's declared grain answers a subtly different question, and a chart cannot say so.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sql",
+          "rows",
+          "cached",
+          "generated_at",
+          "elapsed_ms"
+        ],
+        "title": "ResponseMeta",
+        "type": "object"
+      },
+      "SourceFreshness": {
+        "properties": {
+          "days_behind": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Behind"
+          },
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "last_seen_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Date"
+          },
+          "missing_partitions": {
+            "title": "Missing Partitions",
+            "type": "integer"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_name",
+          "last_seen_date",
+          "days_behind",
+          "missing_partitions",
+          "is_stale"
+        ],
+        "title": "SourceFreshness",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Every number here is compiled from semantic/metrics.yml. Responses echo the SQL they ran and the metric definition they compiled, so any figure can be traced back to its declaration.",
+    "title": "FreshFlow Metrics API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/actions/expiry": {
+      "get": {
+        "description": "Batches worth acting on, most valuable first.\n\nFiltered to `at_risk` by default and deliberately: already-expired stock is\na real loss and appears in the wastage metrics, but no markdown recovers it,\nso putting it in an action queue would give someone a list they cannot act\non ranked above one they can.",
+        "operationId": "expiry_queue_actions_expiry_get",
+        "parameters": [
+          {
+            "description": "Store id, e.g. `FF-BAN-01`",
+            "in": "query",
+            "name": "store",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Store id, e.g. `FF-BAN-01`",
+              "title": "Store"
+            }
+          },
+          {
+            "description": "Rupees at risk, at least",
+            "in": "query",
+            "name": "min_value",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "description": "Rupees at risk, at least",
+              "minimum": 0,
+              "title": "Min Value",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpiryQueueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The ranked action queue"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness and what this instance is reading"
+      }
+    },
+    "/health/freshness": {
+      "get": {
+        "description": "How far behind each source feed is, and which have breached.\n\nRead from dq_source_coverage rather than from max(date) on each fact,\nbecause a feed that stopped arriving looks identical to one that had nothing\nto send unless something tracks the partitions it was supposed to produce.",
+        "operationId": "freshness_health_freshness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Source freshness SLA"
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "list_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Metrics Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List every metric the registry publishes"
+      }
+    },
+    "/metrics/{name}": {
+      "get": {
+        "operationId": "get_metric_metrics__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated, e.g. `store,week`",
+            "in": "query",
+            "name": "dimensions",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, e.g. `store,week`",
+              "title": "Dimensions"
+            }
+          },
+          {
+            "description": "Comma-separated `dimension:value`, e.g. `store_tier:premium`",
+            "in": "query",
+            "name": "filters",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated `dimension:value`, e.g. `store_tier:premium`",
+              "title": "Filters"
+            }
+          },
+          {
+            "description": "Capped at 5000",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Capped at 5000",
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute one metric"
+      }
+    }
+  }
+}
