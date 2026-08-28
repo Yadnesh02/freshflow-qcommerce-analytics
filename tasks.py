@@ -195,6 +195,11 @@ def t_publish_demo(args: argparse.Namespace) -> int:
     return py("-m", "serving.publish_demo", *extra)
 
 
+def t_backtest(_: argparse.Namespace) -> int:
+    """Rolling-origin backtest of the baselines; WAPE by ABC-XYZ class."""
+    return py("-m", "analytics.forecasting.backtest")
+
+
 def t_gate(_: argparse.Namespace) -> int:
     """Run checkpoint gate G1 against the emitted raw layer."""
     return py("-m", "simulator.verify")
@@ -292,6 +297,7 @@ TARGETS = {
     "gate": t_gate,
     "profile": t_profile,
     "lint": t_lint,
+    "backtest": t_backtest,
     "forecast": t_forecast,
     "recommend": t_recommend,
     "experiment": t_experiment,

@@ -218,3 +218,31 @@ def test_validator_rejects_unknown_grain(tmp_path) -> None:
     )
     with pytest.raises(RegistryError, match="not present in dimensions.yml"):
         load_registry(metrics_path=bad)
+
+
+# --------------------------------------------- the generated dictionary
+def test_the_metric_dictionary_is_in_sync_with_the_registry() -> None:
+    """docs/metrics.md is generated, and generated files drift silently.
+
+    It is the artefact a reader meets first - linked from the README, published
+    to Pages - so a stale copy is not a cosmetic problem: it is the registry
+    saying one thing to CI and another to a human. Nothing forced regeneration
+    until this test existed, and the file had already drifted once, still
+    describing fill_rate as "meaningless without" a correction that had shipped.
+
+    Regenerate with `python tasks.py docs`, or `python -m semantic.generate_docs`
+    for just this file.
+    """
+    from pathlib import Path
+
+    from semantic.generate_docs import render
+
+    published = Path(__file__).resolve().parent.parent / "docs" / "metrics.md"
+    assert published.exists(), "docs/metrics.md is missing - run `python tasks.py docs`"
+
+    current = published.read_text(encoding="utf-8").replace("\r\n", "\n")
+    expected = render(reg).replace("\r\n", "\n")
+    assert current == expected, (
+        "docs/metrics.md no longer matches semantic/metrics.yml - "
+        "run `python -m semantic.generate_docs` and commit the result"
+    )

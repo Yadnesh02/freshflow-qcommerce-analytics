@@ -206,7 +206,7 @@ Units fulfilled as a share of units demanded. Uses imputed demand, so it counts 
 | **Expected range** | 0.0 to 1.0 |
 | **Owner** | analytics |
 
-> ⚠ Depends on the censored-demand imputation in S3.1. Meaningless without it.
+> ⚠ Denominator is the arrival-curve imputation from S3.1, not observed sales - so a store that stocked out at 08:00 shows the fill rate its customers experienced rather than 100%. agg_store_sku_day. demand_imputation_method says which estimator each row used.
 
 ### `in_stock_pct` — In-Stock %
 
