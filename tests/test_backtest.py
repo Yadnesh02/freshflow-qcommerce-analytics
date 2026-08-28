@@ -233,7 +233,12 @@ def test_the_registry_metrics_resolve_against_this_table(con) -> None:
 
 
 def test_the_moving_average_window_is_what_it_claims(con) -> None:
-    """A flat forecast repeated across horizons, one value per series per origin."""
+    """A flat forecast repeated across horizons, one value per series per origin.
+
+    Asserted on `baseline_units` rather than `forecast_units`, because those are
+    only the same column until a model that uses `horizon_days` takes the
+    champion slot. S3.3's does, and varying with horizon is the point of it.
+    """
     varying = one(
         con,
         """
@@ -241,11 +246,11 @@ def test_the_moving_average_window_is_what_it_claims(con) -> None:
             select store_id, sku_id, origin_date
             from marts.mart_forecast_accuracy
             group by store_id, sku_id, origin_date
-            having count(distinct round(forecast_units, 9)) > 1
+            having count(distinct round(baseline_units, 9)) > 1
         )
         """,
     )
     assert varying == 0, (
-        f"{varying:,} series-origins carry more than one forecast value across horizons - "
+        f"{varying:,} series-origins carry more than one baseline value across horizons - "
         f"a {MA_WINDOW_DAYS}-day mean does not vary with horizon"
     )

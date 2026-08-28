@@ -30,7 +30,6 @@ DATA_DIRS = [DATA / "raw", DATA / "warehouse", DEMO.parent]
 # targets that are not built yet - each is claimed by a task in docs/EXECUTION_PLAN.md
 PENDING = {
     "simulate": "S1.7",
-    "forecast": "S3.3",
     "recommend": "S4.6",
     "experiment": "S5.1",
     "demo-slice": "S2.8",

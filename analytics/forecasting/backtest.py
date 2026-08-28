@@ -83,25 +83,25 @@ MA_WINDOW_DAYS = 7
 
 TARGET_TABLE = "marts.mart_forecast_accuracy"
 
+# The evaluation origins, defined once. train.py scores against these same
+# origins, and a model compared on a different set of days than the baseline it
+# claims to beat is not being compared at all.
+EVAL_ORIGINS_SQL = f"""
+select span.last_day - {MAX_HORIZON}
+    - cast(step.n * {ORIGIN_STEP_DAYS} as integer) as origin_date
+from (select max(date_day) as last_day from marts.agg_store_sku_day) as span
+cross join (select unnest(generate_series(0, {ORIGIN_COUNT - 1})) as n) as step
+"""
+
 
 BACKTEST_SQL = f"""
 create or replace table {TARGET_TABLE} as
 
-with span as (
+-- origins walk backwards from the last day that still leaves a full horizon of
+-- actuals to score against
+with origins as (
 
-    select max(date_day) as last_day
-    from marts.agg_store_sku_day
-
-),
-
--- one origin a week, walking backwards from the last day that still leaves a
--- full horizon of actuals to score against
-origins as (
-
-    select span.last_day - {MAX_HORIZON}
-        - cast(step.n * {ORIGIN_STEP_DAYS} as integer) as origin_date
-    from span
-    cross join (select unnest(generate_series(0, {ORIGIN_COUNT - 1})) as n) as step
+    {EVAL_ORIGINS_SQL}
 
 ),
 
@@ -151,12 +151,17 @@ select
     -- actually happened
     actuals.units_sold as actual_units,
 
+    -- whatever model currently holds the champion slot; model_name says which.
+    -- train.py overwrites both when LightGBM wins.
     coalesce(moving_average.forecast_units, 0) as forecast_units,
+    'moving_average_{MA_WINDOW_DAYS}d' as model_name,
 
     -- the reference every model is judged against, including this one
     coalesce(seasonal.units_demanded_imputed, 0) as naive_units,
 
-    'moving_average_{MA_WINDOW_DAYS}d' as model_name
+    -- S3.2's baseline, kept alongside so a later model can be compared against
+    -- what it replaced and not only against the naive rule
+    coalesce(moving_average.forecast_units, 0) as baseline_units
 from targets
 inner join marts.agg_store_sku_day as actuals
     on actuals.date_day = targets.date_day
