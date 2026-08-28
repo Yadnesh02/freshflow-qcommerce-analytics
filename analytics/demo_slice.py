@@ -189,6 +189,12 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         # shows - shipping the conclusion without it would make the headline
         # figure unauditable by the person reading it.
         "agg_intraday_arrival_curve": "select * from source.marts.agg_intraday_arrival_curve",
+        # the action queue the app is built around. Filtered to the demo stores
+        # but not to the window: it is a single as-of snapshot, and slicing a
+        # snapshot by date range would empty it.
+        "mart_expiry_risk": (
+            f"select * from source.marts.mart_expiry_risk where store_id in ({store_list})"
+        ),
         "fct_order": (
             f"select * from source.marts.fct_order where store_id in ({store_list}) and {window}"
         ),

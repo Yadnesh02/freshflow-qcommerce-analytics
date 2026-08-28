@@ -92,6 +92,7 @@ WAREHOUSE = Path(
 )
 
 MODEL_NAME = "lightgbm_tweedie"
+FORECAST_TABLE = "marts.mart_demand_forecast"
 
 # Weekly training origins: 7 x 17.8k series x 7 horizons is already ~900k rows a
 # month, and denser origins buy correlated copies of the same week rather than
@@ -181,6 +182,33 @@ def predict_and_score(con: duckdb.DuckDBPyConnection, booster: lgb.Booster) -> N
 
     con.register(
         "predictions", df[["store_id", "sku_id", "date_day", "horizon_days", "prediction"]]
+    )
+    con.register(
+        "_eval_predictions",
+        df[["store_id", "sku_id", "date_day", "origin_date", "horizon_days", "prediction"]],
+    )
+
+    # The forecast itself, kept whole. `mart_forecast_accuracy` drops censored
+    # days because you cannot grade a model against an imputation, but a
+    # consumer that needs to know how much will sell - the expiry risk model in
+    # S3.4, the newsvendor in S4 - needs every cell, and a stockout day is one
+    # of the cells it needs most. Scoring and serving are different jobs and
+    # this is the table for the second one.
+    con.execute(
+        f"""
+        create or replace table {FORECAST_TABLE} as
+        select
+            store_id,
+            sku_id,
+            -- pandas hands these back as timestamps; downstream joins and date
+            -- arithmetic are on dates, and DATE - TIMESTAMP is an interval
+            cast(date_day as date) as date_day,
+            cast(origin_date as date) as origin_date,
+            horizon_days,
+            prediction as forecast_units,
+            '{MODEL_NAME}' as model_name
+        from _eval_predictions
+        """
     )
     con.execute(
         f"""

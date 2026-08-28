@@ -199,6 +199,11 @@ def t_backtest(_: argparse.Namespace) -> int:
     return py("-m", "analytics.forecasting.backtest")
 
 
+def t_expiry_risk(_: argparse.Namespace) -> int:
+    """Score every open batch for expiry risk and value at risk."""
+    return py("-m", "analytics.expiry_risk")
+
+
 def t_gate(_: argparse.Namespace) -> int:
     """Run checkpoint gate G1 against the emitted raw layer."""
     return py("-m", "simulator.verify")
@@ -298,6 +303,7 @@ TARGETS = {
     "lint": t_lint,
     "backtest": t_backtest,
     "forecast": t_forecast,
+    "expiry-risk": t_expiry_risk,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
