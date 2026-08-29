@@ -28,6 +28,17 @@
     would claim - the same uplift counted twice, in two marts, each looking
     correct on its own. The primary promotion is the deepest one actually
     observed, which is the one that set the price.
+
+    `assert_stacked_promotions_attribute_to_the_price_setter` holds that rule
+    open, because until S4.3 it was stated here and enforced nowhere. Note that
+    `collapsed` takes `min(promo_id)`, which reads like an alphabetical
+    tiebreak and is not one - promo_id is constant inside an interval, since
+    intervals break whenever it changes, so the aggregate is a no-op over a
+    constant. On this data the two readings even agree, because "PROMO-DEAL11"
+    sorts before "PROMO-MD-30"; they would diverge on a rename. The test is
+    written against depth rather than ordering so it fails on the real bug -
+    confirmed by making the attribution pick by name, which produced 28
+    failing rows.
 #}
 
 with ledger as (
