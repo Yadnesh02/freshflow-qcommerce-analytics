@@ -182,8 +182,8 @@ This is the sprint that must land. Everything after it is upside.
 | **S4.1** | Elasticity: log-log with store+SKU fixed effects, clustered SEs, partial pooling for thin SKUs | 3h | Signs are negative; premium categories more elastic than staples |
 | **S4.2** ✅ | Markdown optimizer: grid over discount depth, expected-margin objective, cost floor, daily budget | 3h | **Met, and the gate needed restating** — monotonicity holds for the objective at a constant elastic coefficient; at the fitted coefficients the optimiser recommends no markdown at all. See G4 below. |
 | **S4.3** ✅ | Deal-slot allocator (PuLP IP) with all 5 constraints | 2.5h | **Met** — 14/14 store-days optimal, all five constraints bind. The floor needed `ceil`, not `int`: at K=3 truncation gives a floor of 0 and the gate passes vacuously. 30 of 42 slots clear at-risk stock against 0 of 14 under the central pick. |
-| **S4.4** | Transfer optimizer (min-cost flow) with shelf-life feasibility gate | 2.5h | No transfer recommended that can't survive transit |
-| **S4.5** | Newsvendor replenishment with perishable critical ratio | 1.5h | Order-up-to level capped by shelf life |
+| **S4.4** ✅ | Transfer optimizer (min-cost flow) with shelf-life feasibility gate | 2.5h | **Met** — the gate is an arc bound, so infeasible transfers are unrepresentable. 97% of 1,557 arcs dropped, but only 249 for distance: the binding constraint is quantity. |
+| **S4.5** ✅ | Newsvendor replenishment with perishable critical ratio | 1.5h | **Met** — critical ratio rises 0.39 → 0.97 with shelf life; the cap binds on 177 lines. Note it binds hardest in the *middle* band, not the shortest. |
 | **S4.6** | Wire `rec_*` tables into `policies/optimized.py` — **close the loop** | 2h | One simulated day under Policy B produces a sensible action list |
 | **S4.7** | Streamlit pages 4–5 | 2h | Elasticity curves + action queue render |
 
