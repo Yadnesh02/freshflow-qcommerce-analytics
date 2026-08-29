@@ -219,6 +219,16 @@ def t_markdown(args: argparse.Namespace) -> int:
     return py("-m", "analytics.optimization.markdown", "--budget", str(args.budget))
 
 
+def t_transfers(args: argparse.Namespace) -> int:
+    """Recommend inter-store transfers of at-risk stock, gated on shelf life."""
+    return py(
+        "-m",
+        "analytics.optimization.transfers",
+        "--fixed-trip-cost",
+        str(args.fixed_trip_cost),
+    )
+
+
 def t_deal_slots(args: argparse.Namespace) -> int:
     """Allocate the Rs 11 deal slots per store-day with the constraint program."""
     return py(
@@ -334,6 +344,7 @@ TARGETS = {
     "elasticity": t_elasticity,
     "markdown": t_markdown,
     "deal-slots": t_deal_slots,
+    "transfers": t_transfers,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
@@ -377,6 +388,13 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "transfers":
+            p.add_argument(
+                "--fixed-trip-cost",
+                type=float,
+                default=300.0,
+                help="AN ASSUMPTION: rupees per van trip, paid once per store pair",
+            )
         if name == "deal-slots":
             p.add_argument("--slots", type=int, default=3)
             p.add_argument(

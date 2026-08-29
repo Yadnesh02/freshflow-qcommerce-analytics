@@ -309,57 +309,6 @@ models:
         data_tests:
           - not_null
 
-seeds:
-  - name: dte_bands
-    description: "Source lookup for dim_dte_band."
-    columns:
-      - name: band
-        data_tests:
-          - unique
-          - not_null
-
-  - name: calendar_events
-    description: >
-      Dated events for dim_date - the festival cycle and the IPL season. Public
-      calendar information a retailer would hold, not simulator parameters: it
-      deliberately carries no demand multipliers, because inferring those from
-      emitted events is the forecasting work in Sprint 3 and reading them here
-      would make the result circular. Lunar-calendar dates are approximate.
-    columns:
-      - name: event_name
-        data_tests:
-          - unique
-          - not_null
-      - name: event_type
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ["festival", "sports_season"]
-      - name: start_date
-        data_tests:
-          - not_null
-      - name: duration_days
-        data_tests:
-          - not_null
-
-  - name: promotions
-    description: >
-      Promo master. The commercial attributes of a promotion - what kind it is
-      and who funds it - which no event feed records and a commercial team
-      would maintain by hand.
-    columns:
-      - name: promo_id
-        data_tests:
-          - unique
-          - not_null
-      - name: promo_type
-        data_tests:
-          - not_null
-      - name: funding_source
-        data_tests:
-          - not_null
-
   - name: mart_customer_360
     description: >
       One row per customer: RFM scores and segment, cohort, discount dependency
@@ -535,5 +484,56 @@ seeds:
           - not_null
       - name: net_revenue
         description: "Net of returns and discounts. Ties to agg_store_sku_day exactly."
+        data_tests:
+          - not_null
+
+seeds:
+  - name: dte_bands
+    description: "Source lookup for dim_dte_band."
+    columns:
+      - name: band
+        data_tests:
+          - unique
+          - not_null
+
+  - name: calendar_events
+    description: >
+      Dated events for dim_date - the festival cycle and the IPL season. Public
+      calendar information a retailer would hold, not simulator parameters: it
+      deliberately carries no demand multipliers, because inferring those from
+      emitted events is the forecasting work in Sprint 3 and reading them here
+      would make the result circular. Lunar-calendar dates are approximate.
+    columns:
+      - name: event_name
+        data_tests:
+          - unique
+          - not_null
+      - name: event_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["festival", "sports_season"]
+      - name: start_date
+        data_tests:
+          - not_null
+      - name: duration_days
+        data_tests:
+          - not_null
+
+  - name: promotions
+    description: >
+      Promo master. The commercial attributes of a promotion - what kind it is
+      and who funds it - which no event feed records and a commercial team
+      would maintain by hand.
+    columns:
+      - name: promo_id
+        data_tests:
+          - unique
+          - not_null
+      - name: promo_type
+        data_tests:
+          - not_null
+      - name: funding_source
         data_tests:
           - not_null
