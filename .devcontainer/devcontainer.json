@@ -1,33 +1,63 @@
 {
-  "name": "Python 3",
-  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  // FreshFlow dev container.
+  //
+  // Deliberately mirrors .github/workflows/ci.yml rather than the stock
+  // Streamlit template, because CI is the environment this project is already
+  // proven to build in. The template it replaces could run the app but not
+  // rebuild anything: it pinned Python 3.11 against a project requiring 3.12,
+  // and installed requirements.txt - which is the *deployed app's* eight
+  // runtime packages and deliberately excludes dbt, LightGBM, scipy,
+  // statsmodels and PuLP. Those are build-time. Without them there is no
+  // warehouse to serve.
+  "name": "FreshFlow",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+
+  // The warehouse build is several multi-million-row window models running
+  // three-wide, and transform/profiles.yml sets memory_limit: 6GB. A 2-core /
+  // 8GB Codespace will thrash or get killed part way through a full refresh.
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  // uv, then the full dependency set including dev extras - the same two
+  // commands CI runs. `uv sync` reads uv.lock, so the container gets the exact
+  // versions that produced the committed results.
+  "onCreateCommand": "curl -LsSf https://astral.sh/uv/install.sh | sh",
+  "updateContentCommand": "$HOME/.local/bin/uv sync --all-extras --dev && $HOME/.local/bin/uv run python tasks.py setup",
+
+  // No auto-start. `data/raw` is gitignored and the warehouse is not in the
+  // repo, so launching Streamlit on attach would open a broken app before
+  // there is anything to serve. The rebuild is one command and it is printed
+  // instead, because it takes ~15 minutes and should be a choice.
+  "postAttachCommand": "bash .devcontainer/welcome.sh",
+
   "customizations": {
-    "codespaces": {
-      "openFiles": [
-        "README.md",
-        "serving/web/streamlit/Home.py"
-      ]
-    },
     "vscode": {
-      "settings": {},
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
+        "python.terminal.activateEnvironment": true
+      },
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance"
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "innoverio.vscode-dbt-power-user"
       ]
+    },
+    "codespaces": {
+      "openFiles": ["README.md", "docs/EXECUTION_PLAN.md"]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; echo '✅ Packages installed and Requirements met'",
-  "postAttachCommand": {
-    "server": "streamlit run serving/web/streamlit/Home.py --server.enableCORS false --server.enableXsrfProtection false"
-  },
+
+  "forwardPorts": [8000, 8501],
   "portsAttributes": {
-    "8501": {
-      "label": "Application",
-      "onAutoForward": "openPreview"
-    }
-  },
-  "forwardPorts": [
-    8501
-  ]
+    "8000": { "label": "Metrics API", "onAutoForward": "silent" },
+    "8501": { "label": "Control Tower", "onAutoForward": "notify" }
+  }
 }
