@@ -48,7 +48,18 @@ from simulator.fefo import (
 )
 from simulator.policies.base import PolicyContext
 from simulator.policies.baseline import BaselinePolicy
+from simulator.policies.optimized import OptimizedPolicy
 from simulator.supply import SupplyChain
+
+
+def build_policy(name: str, cfg, catalog):
+    """Pick an arm by name. Sprint 5 runs both over identical demand."""
+    if name == "baseline":
+        return BaselinePolicy(cfg, catalog)
+    if name == "optimized":
+        return OptimizedPolicy(cfg, catalog)
+    raise ValueError(f"unknown policy {name!r} - expected 'baseline' or 'optimized'")
+
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = ROOT / "data" / "raw"
@@ -109,7 +120,7 @@ class SimulationRun:
         self.baskets = BasketAssembler(self.cfg, self.catalog, self.customers)
         self.supply = SupplyChain(self.cfg, self.catalog, seed=self.seed)
         self.fulfiller = Fulfiller(self.cfg, self.catalog)
-        self.policy = BaselinePolicy(self.cfg, self.catalog)
+        self.policy = build_policy(self.policy_name, self.cfg, self.catalog)
 
         self.S, self.K = len(self.cfg.stores), len(self.catalog)
         self.ledger = InventoryLedger(self.S, self.K)
@@ -123,7 +134,7 @@ class SimulationRun:
         self.open_ord = np.array([s["opened_date"].toordinal() for s in self.cfg.stores])
 
         # rolling state the policy reads
-        window = self.cfg.policies["baseline"]["replenishment"]["trailing_window_days"]
+        window = self.cfg.policies[self.policy_name]["replenishment"]["trailing_window_days"]
         self._window = window
         self._sales_history = np.zeros((window, self.S, self.K))
         # which cells were actually available to sell on each of those days
@@ -175,8 +186,15 @@ class SimulationRun:
         permanent stockout, then bury the model in cold-start orders that all
         expire together. Real networks open the analysis window mid-life, so
         the simulation does too: every trading store starts with roughly the
-        cover its own policy would hold, on batches whose remaining shelf life
-        is already spread out.
+        cover a competent operator would hold, on batches whose remaining shelf
+        life is already spread out.
+
+        **Both arms open from the same shelf, deliberately.** The cover here is
+        computed from the baseline's parameters whichever policy is about to
+        run, because a treatment arm that also got to choose its own starting
+        inventory would be measured partly on that head start. Common initial
+        conditions are the same idea as the common random numbers S5.1 uses on
+        demand: hold everything fixed except the decision rule.
         """
         rep = self.cfg.policies["baseline"]["replenishment"]
         cover = rep["assumed_lead_time_days"] + rep["review_period_days"] + rep["safety_days"]
@@ -703,6 +721,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the data-defect injection pass (default: inject, like a real feed)",
     )
+    ap.add_argument(
+        "--policy",
+        default="baseline",
+        choices=["baseline", "optimized"],
+        help="which arm to run (default: baseline, the control)",
+    )
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
@@ -710,7 +734,12 @@ def main(argv: list[str] | None = None) -> int:
         shutil.rmtree(args.out)
 
     run = SimulationRun(
-        load_sim_config(), seed=args.seed, days=args.days, out_dir=args.out, quiet=args.quiet
+        load_sim_config(),
+        seed=args.seed,
+        days=args.days,
+        out_dir=args.out,
+        policy_name=args.policy,
+        quiet=args.quiet,
     )
     frame = run.run()
     run.report(frame)

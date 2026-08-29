@@ -90,4 +90,22 @@ baseline:
 optimized:
   name: optimized
   description: Forecast-driven ordering, risk-scored markdown, per-store deal slots, transfers.
-  implemented: false
+  implemented: true
+
+  # Everything fitted from data lives in config/policy_bundle.json, written by
+  # `python tasks.py policy-bundle`. It is NOT hand-maintained and NOT edited
+  # here: elasticities, the demand dispersion and the lead-time distribution are
+  # estimates with provenance, and copying them into a config by hand would lose
+  # the link back to the run that produced them.
+  #
+  # What stays here is the handful of operating choices nothing estimates - how
+  # small an order is worth placing, what a new SKU gets before it has a history.
+  # Those are the same for both arms, deliberately, so the diff between the two
+  # policies is the decision logic and not the plumbing.
+  replenishment:
+    # same trailing window as the baseline: both arms must see the same history,
+    # or the comparison is measuring the window rather than the policy
+    trailing_window_days: 7
+    min_order_qty: 3
+    order_multiple: 3
+    cold_start_units: 12
