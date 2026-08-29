@@ -185,9 +185,11 @@ This is the sprint that must land. Everything after it is upside.
 | **S4.4** ✅ | Transfer optimizer (min-cost flow) with shelf-life feasibility gate | 2.5h | **Met** — the gate is an arc bound, so infeasible transfers are unrepresentable. 97% of 1,557 arcs dropped, but only 249 for distance: the binding constraint is quantity. |
 | **S4.5** ✅ | Newsvendor replenishment with perishable critical ratio | 1.5h | **Met** — critical ratio rises 0.39 → 0.97 with shelf life; the cap binds on 177 lines. Note it binds hardest in the *middle* band, not the shortest. |
 | **S4.6** ✅ | Wire Sprint 4's fitted parameters into `policies/optimized.py` — **close the loop** | 2h | **Met.** Policy B reads a *parameter bundle*, not the `rec_*` tables: those were computed on the full year, so a policy reading its own row on day 120 would be reading day 300. `python tasks.py actions` runs a real simulated day. |
-| **S4.7** | Streamlit pages 4–5 | 2h | Elasticity curves + action queue render |
+| **S4.7** ✅ | Streamlit pages 4–5 | 2h | **Met** — both render from real data through the API, no direct DuckDB call. Two new endpoints (`/elasticity`, `/actions/queue`). The queue is grouped by engine, not ranked globally: the four measure different rupees. |
 
-**Sprint 4 DoD:** running Policy B for one simulated day yields concrete, defensible actions with rupee values.
+**Sprint 4 DoD ✅ MET.** `python tasks.py actions` runs a real simulated day under Policy B and prints the action list; `python tasks.py app` renders it. All seven tasks closed.
+
+> **Outstanding before this reaches the live app:** the demo slice now carries the four `rec_*` tables and `mart_price_elasticity`, but it has not been rebuilt or republished — the local warehouse is bit-corrupted and the machine is failing. Rebuild and `publish-demo` once the hardware is cleared.
 
 ---
 

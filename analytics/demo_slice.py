@@ -201,6 +201,27 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         # not filtered by store: cohorts are defined across the estate, and a
         # per-store slice of a cohort is a different cohort with the same name
         "mart_cohort_retention": "select * from source.marts.mart_cohort_retention",
+        # Sprint 4's decision engines. Snapshots like mart_expiry_risk, so
+        # filtered by store and not by window.
+        "rec_markdown": (
+            f"select * from source.marts.rec_markdown where store_id in ({store_list})"
+        ),
+        "rec_deal_slot": (
+            f"select * from source.marts.rec_deal_slot where store_id in ({store_list})"
+        ),
+        # both ends have to be demo stores, or the page shows a transfer to a
+        # store the slice does not contain
+        "rec_transfer_order": (
+            "select * from source.marts.rec_transfer_order "
+            f"where from_store in ({store_list}) and to_store in ({store_list})"
+        ),
+        "rec_purchase_order": (
+            f"select * from source.marts.rec_purchase_order where store_id in ({store_list})"
+        ),
+        # not filtered at all: elasticity is fitted per category and freshness
+        # band across the whole estate, so a per-store slice of it is not the
+        # coefficient anything was priced against
+        "mart_price_elasticity": "select * from source.marts.mart_price_elasticity",
         "fct_order": (
             f"select * from source.marts.fct_order where store_id in ({store_list}) and {window}"
         ),

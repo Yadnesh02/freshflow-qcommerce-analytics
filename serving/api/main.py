@@ -52,12 +52,16 @@ from semantic.resolver import (
 )
 from serving.api.cache import TTLCache
 from serving.api.schemas import (
+    ActionQueueResponse,
+    ElasticityCell,
+    ElasticityResponse,
     ErrorResponse,
     ExpiryAction,
     ExpiryQueueResponse,
     FreshnessResponse,
     MetricDefinition,
     MetricResponse,
+    RecommendedAction,
     ResponseMeta,
     SourceFreshness,
 )
@@ -244,6 +248,20 @@ def _serve(sql: str, params: list[Any]) -> tuple[list[dict], bool, float]:
     return rows, False, (time.perf_counter() - started) * 1000
 
 
+def _table_exists(table: str) -> bool:
+    """Whether a marts table is present.
+
+    The four decision engines are built and run independently, so the action
+    queue has to degrade to whatever exists rather than fail whole.
+    """
+    rows = warehouse.query(
+        "select count(*) as n from information_schema.tables "
+        "where table_schema = 'marts' and table_name = ?",
+        [table],
+    )
+    return bool(rows and rows[0]["n"])
+
+
 def _now() -> str:
     return dt.datetime.now(tz=dt.UTC).replace(microsecond=0).isoformat()
 
@@ -353,6 +371,220 @@ def expiry_queue(
             warnings=[
                 "at_risk only: expired stock is a booked loss, not an action",
             ],
+        ),
+    )
+
+
+@app.get(
+    "/elasticity",
+    response_model=ElasticityResponse,
+    summary="Price response by category and freshness",
+)
+def elasticity(
+    category: str | None = Query(default=None, description="L1 category, e.g. `Dairy & Eggs`"),
+    identified_only: bool = Query(
+        default=False, description="Drop cells where no price response was established"
+    ),
+) -> ElasticityResponse:
+    """The demand curves S4.2 prices against, including the ones that are not there.
+
+    Nine of twenty-three cells could not be identified: their confidence
+    intervals cover zero, and two of the thin ones came back at +8.60 and +1.61,
+    which is a Poisson fit dividing by a price series with no variation in it
+    rather than a finding. They are returned by default and flagged, because a
+    chart of only the cells that worked would show a tidy demand curve across
+    every category and imply the last day was measured. It was not, in any
+    category.
+    """
+    clauses: list[str] = []
+    params: list[Any] = []
+    if category:
+        clauses.append("est.l1_category = ?")
+        params.append(category)
+    if identified_only:
+        clauses.append("est.is_identified")
+    where = f"where {' and '.join(clauses)}\n" if clauses else ""
+
+    sql = (
+        "select est.l1_category, est.dte_band, bands.min_days, bands.max_days,\n"
+        "       est.observations, est.discounted_observations,\n"
+        "       est.elasticity_raw, est.standard_error, est.is_identified,\n"
+        "       case when est.is_identified then est.elasticity_raw end as elasticity_usable,\n"
+        "       est.elasticity_basis\n"
+        "from marts.mart_price_elasticity as est\n"
+        "inner join marts.dim_dte_band as bands on bands.dte_band = est.dte_band\n"
+        f"{where}"
+        "order by est.l1_category, bands.sort_order"
+    )
+    try:
+        rows, cached, elapsed = _serve(sql, params)
+    except duckdb.CatalogException as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="mart_price_elasticity is not built - run `python tasks.py elasticity`",
+        ) from exc
+
+    unidentified = sum(1 for row in rows if not row["is_identified"])
+    warnings = []
+    if unidentified:
+        warnings.append(
+            f"{unidentified} of {len(rows)} cells found no price response; "
+            "elasticity_usable is null for those and they must not be priced against"
+        )
+    return ElasticityResponse(
+        data=[ElasticityCell(**row) for row in rows],
+        meta=ResponseMeta(
+            sql=sql,
+            params=params,
+            rows=len(rows),
+            cached=cached,
+            generated_at=_now(),
+            elapsed_ms=round(elapsed, 2),
+            warnings=warnings,
+        ),
+    )
+
+
+ACTION_QUEUE_SQL = """
+with markdown as (
+    select
+        'markdown' as action_type, store_id, sku_id, sku_name, l1_category,
+        'cut to ' || cast(round(recommended_price, 0) as varchar)
+            || ' from ' || cast(round(posted_price, 0) as varchar) as detail,
+        expected_units_sold as units,
+        margin_vs_do_nothing as value_inr,
+        'margin gained vs holding price' as value_basis,
+        'elasticity ' || cast(round(elasticity_used, 2) as varchar)
+            || ' at ' || dte_band as rationale
+    from marts.rec_markdown
+    where decision = 'markdown'
+),
+deal as (
+    select
+        'deal_slot' as action_type, store_id, sku_id, sku_name, l1_category,
+        'Rs 11 slot, rank ' || cast(slot_rank as varchar) as detail,
+        expected_units as units,
+        slot_value as value_inr,
+        'net slot value' as value_basis,
+        case when clearance_value > 0
+             then 'clears ' || cast(round(units_at_risk, 0) as varchar) || ' at-risk units'
+             else 'basket and reactivation only' end as rationale
+    from marts.rec_deal_slot
+),
+transfer as (
+    select
+        'transfer' as action_type, from_store as store_id, sku_id, sku_name, l1_category,
+        'send ' || cast(units as varchar) || ' to ' || to_store as detail,
+        cast(units as double) as units,
+        net_benefit as value_inr,
+        'write-off avoided net of the trip' as value_basis,
+        cast(round(km, 1) as varchar) || ' km, '
+            || cast(round(sellable_days_after_transit, 1) as varchar)
+            || 'd of life on arrival' as rationale
+    from marts.rec_transfer_order
+),
+purchase as (
+    select
+        'replenish' as action_type, store_id, sku_id, sku_name, l1_category,
+        'order ' || cast(order_units as varchar) || ' units' as detail,
+        order_units as units,
+        order_units * landed_cost as value_inr,
+        'landed cost being committed' as value_basis,
+        case when is_shelf_life_capped
+             then 'capped by shelf life, not by service level'
+             else 'service level ' || cast(round(critical_ratio, 2) as varchar) end as rationale
+    from marts.rec_purchase_order
+)
+select * from ({union_sql})
+{where}
+-- Grouped before ranked, deliberately. A global sort by rupees puts every
+-- purchase order above every transfer, because a replenishment line's value is
+-- money about to be SPENT and a transfer's is money SAVED. Those are not the
+-- same quantity and ordering them against each other is a category error that
+-- reads as a priority.
+order by action_type, value_inr desc
+limit {limit}
+"""
+
+
+@app.get("/actions/queue", response_model=ActionQueueResponse, summary="Everything to do today")
+def action_queue(
+    store: str | None = Query(default=None, description="Store id, e.g. `FF-BAN-01`"),
+    action_type: str | None = Query(
+        default=None, description="markdown | deal_slot | transfer | replenish"
+    ),
+    limit: int = Query(default=100, ge=1),
+) -> ActionQueueResponse:
+    """The four decision engines' output as one ranked list.
+
+    Grouped by engine, ranked by value within each. Not ranked globally: the
+    four engines measure different rupees. A replenishment line's value is money
+    about to be committed; a transfer's is a write-off avoided. Sorting those
+    against one another puts every purchase order above every transfer and reads
+    as a priority ordering, which it is not. `value_basis` says what each number
+    is so nothing downstream has to guess.
+
+    A missing table is not an error here. The engines are built and run
+    independently, so this returns whatever exists and names what does not -
+    a queue that 503s because one optimiser has not been run yet is useless on
+    exactly the day somebody needs the other three.
+    """
+    sources = {
+        "markdown": "rec_markdown",
+        "deal_slot": "rec_deal_slot",
+        "transfer": "rec_transfer_order",
+        "replenish": "rec_purchase_order",
+    }
+    wanted = [action_type] if action_type else list(sources)
+    available, missing = [], []
+    for name in wanted:
+        if name not in sources:
+            raise HTTPException(status_code=422, detail=f"unknown action_type {name!r}")
+        if _table_exists(sources[name]):
+            available.append(name)
+        else:
+            missing.append(f"{sources[name]} is not built")
+
+    if not available:
+        return ActionQueueResponse(
+            data=[],
+            meta=ResponseMeta(
+                sql="",
+                params=[],
+                rows=0,
+                cached=False,
+                generated_at=_now(),
+                elapsed_ms=0.0,
+                warnings=missing or ["no decision engine has been run"],
+            ),
+        )
+
+    blocks = {
+        "markdown": "select * from markdown",
+        "deal_slot": "select * from deal",
+        "transfer": "select * from transfer",
+        "replenish": "select * from purchase",
+    }
+    union_sql = "\nunion all\n".join(blocks[name] for name in available)
+    params: list[Any] = []
+    where = ""
+    if store:
+        where = "where store_id = ?"
+        params.append(store)
+
+    sql = ACTION_QUEUE_SQL.format(union_sql=union_sql, where=where, limit=_clamp(limit))
+    rows, cached, elapsed = _serve(sql, params)
+
+    return ActionQueueResponse(
+        data=[RecommendedAction(**row) for row in rows],
+        meta=ResponseMeta(
+            sql=sql,
+            params=params,
+            rows=len(rows),
+            cached=cached,
+            generated_at=_now(),
+            elapsed_ms=round(elapsed, 2),
+            warnings=missing,
         ),
     )
 

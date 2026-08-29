@@ -154,6 +154,34 @@ class MetricsClient:
             "/actions/expiry", {"store": store, "min_value": min_value, "limit": limit}
         )
 
+    def elasticity(self, category: str | None = None, identified_only: bool = False) -> ApiResult:
+        """Price response by category and freshness band, unidentified cells included.
+
+        Included on purpose: a chart of only the cells that worked would show a
+        clean demand curve for every category and imply the last day was
+        measured. It was not, in any of them.
+        """
+        params: dict[str, Any] = {}
+        if category:
+            params["category"] = category
+        if identified_only:
+            params["identified_only"] = True
+        return self._get("/elasticity", params)
+
+    def action_queue(
+        self,
+        store: str | None = None,
+        action_type: str | None = None,
+        limit: int = 100,
+    ) -> ApiResult:
+        """Everything the four decision engines say to do today."""
+        params: dict[str, Any] = {"limit": limit}
+        if store:
+            params["store"] = store
+        if action_type:
+            params["action_type"] = action_type
+        return self._get("/actions/queue", params)
+
     def freshness(self) -> ApiResult:
         return self._get("/health/freshness")
 
