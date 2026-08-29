@@ -219,6 +219,18 @@ def t_markdown(args: argparse.Namespace) -> int:
     return py("-m", "analytics.optimization.markdown", "--budget", str(args.budget))
 
 
+def t_deal_slots(args: argparse.Namespace) -> int:
+    """Allocate the Rs 11 deal slots per store-day with the constraint program."""
+    return py(
+        "-m",
+        "analytics.optimization.deal_slots",
+        "--slots",
+        str(args.slots),
+        "--reactivation-value",
+        str(args.reactivation_value),
+    )
+
+
 def t_gate(_: argparse.Namespace) -> int:
     """Run checkpoint gate G1 against the emitted raw layer."""
     return py("-m", "simulator.verify")
@@ -321,6 +333,7 @@ TARGETS = {
     "expiry-risk": t_expiry_risk,
     "elasticity": t_elasticity,
     "markdown": t_markdown,
+    "deal-slots": t_deal_slots,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
@@ -364,6 +377,14 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "deal-slots":
+            p.add_argument("--slots", type=int, default=3)
+            p.add_argument(
+                "--reactivation-value",
+                type=float,
+                default=0.0,
+                help="AN ASSUMPTION: rupees a reactivated customer is worth",
+            )
         if name == "markdown":
             p.add_argument(
                 "--budget",
