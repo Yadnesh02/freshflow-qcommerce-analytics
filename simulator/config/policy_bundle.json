@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "elasticity_cells": 23,
+    "elasticity_identified": 14,
+    "lead_time_categories": 12,
+    "note": "Fitted parameters only. No per-day recommendations and no simulator ground truth: a policy reading either would be scoring its own future."
+  },
+  "demand": {
+    "dispersion_k": 1.1868773489362348,
+    "distribution": "negative_binomial"
+  },
+  "elasticity": [
+    {
+      "l1_category": "Dairy & Eggs",
+      "dte_band": "0-1d",
+      "min_days": 0,
+      "max_days": 1,
+      "elasticity_raw": -0.1609511473088331,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Dairy & Eggs",
+      "dte_band": "1-2d",
+      "min_days": 1,
+      "max_days": 2,
+      "elasticity_raw": -0.08874230555811663,
+      "is_identified": true,
+      "elasticity_usable": -0.08874230555811663
+    },
+    {
+      "l1_category": "Dairy & Eggs",
+      "dte_band": "2-3d",
+      "min_days": 2,
+      "max_days": 3,
+      "elasticity_raw": -0.5278581121531224,
+      "is_identified": true,
+      "elasticity_usable": -0.5278581121531224
+    },
+    {
+      "l1_category": "Dairy & Eggs",
+      "dte_band": "3-5d",
+      "min_days": 3,
+      "max_days": 5,
+      "elasticity_raw": -0.5404946709372883,
+      "is_identified": true,
+      "elasticity_usable": -0.5404946709372883
+    },
+    {
+      "l1_category": "Dairy & Eggs",
+      "dte_band": "5-7d",
+      "min_days": 5,
+      "max_days": 7,
+      "elasticity_raw": -0.44595233190664874,
+      "is_identified": true,
+      "elasticity_usable": -0.44595233190664874
+    },
+    {
+      "l1_category": "Dairy & Eggs",
+      "dte_band": "7d+",
+      "min_days": 7,
+      "max_days": 9999,
+      "elasticity_raw": -0.320110715013897,
+      "is_identified": true,
+      "elasticity_usable": -0.320110715013897
+    },
+    {
+      "l1_category": "Fruits & Vegetables",
+      "dte_band": "0-1d",
+      "min_days": 0,
+      "max_days": 1,
+      "elasticity_raw": 8.597760077553973,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Fruits & Vegetables",
+      "dte_band": "1-2d",
+      "min_days": 1,
+      "max_days": 2,
+      "elasticity_raw": 0.036309834380989385,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Fruits & Vegetables",
+      "dte_band": "2-3d",
+      "min_days": 2,
+      "max_days": 3,
+      "elasticity_raw": -0.13460600786873345,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Fruits & Vegetables",
+      "dte_band": "3-5d",
+      "min_days": 3,
+      "max_days": 5,
+      "elasticity_raw": -0.2940612160170215,
+      "is_identified": true,
+      "elasticity_usable": -0.2940612160170215
+    },
+    {
+      "l1_category": "Fruits & Vegetables",
+      "dte_band": "5-7d",
+      "min_days": 5,
+      "max_days": 7,
+      "elasticity_raw": -0.36261804877139403,
+      "is_identified": true,
+      "elasticity_usable": -0.36261804877139403
+    },
+    {
+      "l1_category": "Fruits & Vegetables",
+      "dte_band": "7d+",
+      "min_days": 7,
+      "max_days": 9999,
+      "elasticity_raw": -0.4086331203347577,
+      "is_identified": true,
+      "elasticity_usable": -0.4086331203347577
+    },
+    {
+      "l1_category": "Meat, Fish & Seafood",
+      "dte_band": "0-1d",
+      "min_days": 0,
+      "max_days": 1,
+      "elasticity_raw": 1.6062218991964818,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Meat, Fish & Seafood",
+      "dte_band": "1-2d",
+      "min_days": 1,
+      "max_days": 2,
+      "elasticity_raw": -0.03828090962399318,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Meat, Fish & Seafood",
+      "dte_band": "2-3d",
+      "min_days": 2,
+      "max_days": 3,
+      "elasticity_raw": -0.39820894188414857,
+      "is_identified": true,
+      "elasticity_usable": -0.39820894188414857
+    },
+    {
+      "l1_category": "Meat, Fish & Seafood",
+      "dte_band": "3-5d",
+      "min_days": 3,
+      "max_days": 5,
+      "elasticity_raw": -0.4289935913764544,
+      "is_identified": true,
+      "elasticity_usable": -0.4289935913764544
+    },
+    {
+      "l1_category": "Ready to Eat & Frozen",
+      "dte_band": "0-1d",
+      "min_days": 0,
+      "max_days": 1,
+      "elasticity_raw": 0.19995064230661547,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Ready to Eat & Frozen",
+      "dte_band": "1-2d",
+      "min_days": 1,
+      "max_days": 2,
+      "elasticity_raw": 0.04959821028063341,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Ready to Eat & Frozen",
+      "dte_band": "2-3d",
+      "min_days": 2,
+      "max_days": 3,
+      "elasticity_raw": -0.5466937471791513,
+      "is_identified": false,
+      "elasticity_usable": null
+    },
+    {
+      "l1_category": "Ready to Eat & Frozen",
+      "dte_band": "3-5d",
+      "min_days": 3,
+      "max_days": 5,
+      "elasticity_raw": -0.867687355609133,
+      "is_identified": true,
+      "elasticity_usable": -0.867687355609133
+    },
+    {
+      "l1_category": "Ready to Eat & Frozen",
+      "dte_band": "5-7d",
+      "min_days": 5,
+      "max_days": 7,
+      "elasticity_raw": -0.9703933083461665,
+      "is_identified": true,
+      "elasticity_usable": -0.9703933083461665
+    },
+    {
+      "l1_category": "Ready to Eat & Frozen",
+      "dte_band": "7d+",
+      "min_days": 7,
+      "max_days": 9999,
+      "elasticity_raw": -0.3111541486368117,
+      "is_identified": true,
+      "elasticity_usable": -0.3111541486368117
+    },
+    {
+      "l1_category": "Snacks & Namkeen",
+      "dte_band": "7d+",
+      "min_days": 7,
+      "max_days": 9999,
+      "elasticity_raw": -0.8477620719823395,
+      "is_identified": true,
+      "elasticity_usable": -0.8477620719823395
+    }
+  ],
+  "lead_time_days": {
+    "by_category": {
+      "Baby & Pet Care": {
+        "p90": 5.0,
+        "mean": 3.174179962165828,
+        "observations": 28017
+      },
+      "Bakery": {
+        "p90": 3.0,
+        "mean": 2.111970869367319,
+        "observations": 4394
+      },
+      "Beverages": {
+        "p90": 4.0,
+        "mean": 2.806120722473669,
+        "observations": 94564
+      },
+      "Dairy & Eggs": {
+        "p90": 3.0,
+        "mean": 1.5575880758807588,
+        "observations": 60516
+      },
+      "Fruits & Vegetables": {
+        "p90": 3.0,
+        "mean": 1.9977242556419497,
+        "observations": 5273
+      },
+      "Health & Wellness": {
+        "p90": 4.0,
+        "mean": 2.8187001771479183,
+        "observations": 18064
+      },
+      "Household & Cleaning": {
+        "p90": 4.0,
+        "mean": 2.5333526122999808,
+        "observations": 62244
+      },
+      "Meat, Fish & Seafood": {
+        "p90": 3.0,
+        "mean": 1.8857886904761905,
+        "observations": 2688
+      },
+      "Personal Care": {
+        "p90": 4.0,
+        "mean": 2.542875122360509,
+        "observations": 71510
+      },
+      "Ready to Eat & Frozen": {
+        "p90": 3.0,
+        "mean": 2.086359357138054,
+        "observations": 59484
+      },
+      "Snacks & Namkeen": {
+        "p90": 4.0,
+        "mean": 2.8205229999136963,
+        "observations": 115870
+      },
+      "Staples & Packaged Food": {
+        "p90": 4.0,
+        "mean": 2.818628965801401,
+        "observations": 116496
+      }
+    },
+    "pooled_p90": 4.0
+  },
+  "newsvendor": {
+    "review_period_days": 1,
+    "lead_time_quantile": 0.9,
+    "shelf_life_cap_quantile": 0.95,
+    "stockout_retention_cost": 0.0
+  },
+  "markdown": {
+    "depth_grid": [
+      0.0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6
+    ],
+    "budget_per_store_day": 1000.0,
+    "disposal_cost_per_unit": 0.0,
+    "note": "At the fitted elasticities the optimiser holds price nearly everywhere: while stock is short of demand the objective is revenue, which falls with price whenever |elasticity| < 1, and no band reaches 1."
+  },
+  "deal_slot": {
+    "deal_price": 11.0,
+    "slots_per_store_day": 3,
+    "private_label_floor": 0.3,
+    "uplift_multiplier": 3.57,
+    "incremental_basket_margin": 6.27,
+    "reactivation_rate": 0.0283,
+    "reactivation_value": 0.0,
+    "min_on_hand_units": 12,
+    "min_days_to_expiry": 1
+  },
+  "transfers": {
+    "speed_kmh": 18.0,
+    "handling_hours": 2.0,
+    "cost_per_km": 15.0,
+    "fixed_trip_cost": 300.0,
+    "min_transfer_units": 6
+  }
+}

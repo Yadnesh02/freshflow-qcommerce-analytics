@@ -219,6 +219,23 @@ def t_markdown(args: argparse.Namespace) -> int:
     return py("-m", "analytics.optimization.markdown", "--budget", str(args.budget))
 
 
+def t_policy_bundle(_: argparse.Namespace) -> int:
+    """Export Sprint 4's fitted parameters for the optimised policy arm."""
+    return py("-m", "analytics.optimization.policy_bundle")
+
+
+def t_actions(args: argparse.Namespace) -> int:
+    """Run one simulated day and print the action list for an arm."""
+    return py(
+        "-m",
+        "simulator.policies.preview",
+        "--policy",
+        args.policy,
+        "--days",
+        str(args.days),
+    )
+
+
 def t_newsvendor(args: argparse.Namespace) -> int:
     """Perishable newsvendor order-up-to levels, capped by shelf life."""
     return py(
@@ -356,6 +373,8 @@ TARGETS = {
     "deal-slots": t_deal_slots,
     "transfers": t_transfers,
     "newsvendor": t_newsvendor,
+    "policy-bundle": t_policy_bundle,
+    "actions": t_actions,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
@@ -399,6 +418,9 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "actions":
+            p.add_argument("--policy", default="both", choices=["baseline", "optimized", "both"])
+            p.add_argument("--days", type=int, default=75, help="warm-up days before the readout")
         if name == "newsvendor":
             p.add_argument(
                 "--retention-cost",
