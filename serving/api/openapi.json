@@ -1,6 +1,117 @@
 {
   "components": {
     "schemas": {
+      "ActionQueueResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendedAction"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ActionQueueResponse",
+        "type": "object"
+      },
+      "ElasticityCell": {
+        "description": "One category x freshness band, and whether it means anything.\n\n`elasticity_usable` is null wherever S4.1 could not establish a downward\nslope. That is the field a consumer should read: `elasticity_raw` is what\nthe fit returned, including the cells whose interval covers zero and the\ntwo thin ones that came back at +8.60 and +1.61. Publishing only the raw\nnumber would invite exactly the misreading the estimator exists to prevent.",
+        "properties": {
+          "discounted_observations": {
+            "title": "Discounted Observations",
+            "type": "integer"
+          },
+          "dte_band": {
+            "title": "Dte Band",
+            "type": "string"
+          },
+          "elasticity_basis": {
+            "title": "Elasticity Basis",
+            "type": "string"
+          },
+          "elasticity_raw": {
+            "title": "Elasticity Raw",
+            "type": "number"
+          },
+          "elasticity_usable": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elasticity Usable"
+          },
+          "is_identified": {
+            "title": "Is Identified",
+            "type": "boolean"
+          },
+          "l1_category": {
+            "title": "L1 Category",
+            "type": "string"
+          },
+          "max_days": {
+            "title": "Max Days",
+            "type": "integer"
+          },
+          "min_days": {
+            "title": "Min Days",
+            "type": "integer"
+          },
+          "observations": {
+            "title": "Observations",
+            "type": "integer"
+          },
+          "standard_error": {
+            "title": "Standard Error",
+            "type": "number"
+          }
+        },
+        "required": [
+          "l1_category",
+          "dte_band",
+          "min_days",
+          "max_days",
+          "observations",
+          "discounted_observations",
+          "elasticity_raw",
+          "standard_error",
+          "is_identified",
+          "elasticity_usable",
+          "elasticity_basis"
+        ],
+        "title": "ElasticityCell",
+        "type": "object"
+      },
+      "ElasticityResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ElasticityCell"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ElasticityResponse",
+        "type": "object"
+      },
       "ExpiryAction": {
         "description": "One row of the ranked action queue.",
         "properties": {
@@ -291,6 +402,78 @@
         "title": "MetricResponse",
         "type": "object"
       },
+      "RecommendedAction": {
+        "description": "One thing to do today, from any of the four decision engines.",
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "l1_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L1 Category"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "sku_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Name"
+          },
+          "store_id": {
+            "title": "Store Id",
+            "type": "string"
+          },
+          "units": {
+            "title": "Units",
+            "type": "number"
+          },
+          "value_basis": {
+            "description": "What value_inr measures. Not comparable across bases: a replenishment line's rupees are money about to be spent, a transfer's are money saved.",
+            "title": "Value Basis",
+            "type": "string"
+          },
+          "value_inr": {
+            "title": "Value Inr",
+            "type": "number"
+          }
+        },
+        "required": [
+          "action_type",
+          "store_id",
+          "sku_id",
+          "detail",
+          "units",
+          "value_inr",
+          "value_basis",
+          "rationale"
+        ],
+        "title": "RecommendedAction",
+        "type": "object"
+      },
       "ResponseMeta": {
         "properties": {
           "cached": {
@@ -516,6 +699,145 @@
           }
         },
         "summary": "The ranked action queue"
+      }
+    },
+    "/actions/queue": {
+      "get": {
+        "description": "The four decision engines' output as one ranked list.\n\nGrouped by engine, ranked by value within each. Not ranked globally: the\nfour engines measure different rupees. A replenishment line's value is money\nabout to be committed; a transfer's is a write-off avoided. Sorting those\nagainst one another puts every purchase order above every transfer and reads\nas a priority ordering, which it is not. `value_basis` says what each number\nis so nothing downstream has to guess.\n\nA missing table is not an error here. The engines are built and run\nindependently, so this returns whatever exists and names what does not -\na queue that 503s because one optimiser has not been run yet is useless on\nexactly the day somebody needs the other three.",
+        "operationId": "action_queue_actions_queue_get",
+        "parameters": [
+          {
+            "description": "Store id, e.g. `FF-BAN-01`",
+            "in": "query",
+            "name": "store",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Store id, e.g. `FF-BAN-01`",
+              "title": "Store"
+            }
+          },
+          {
+            "description": "markdown | deal_slot | transfer | replenish",
+            "in": "query",
+            "name": "action_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "markdown | deal_slot | transfer | replenish",
+              "title": "Action Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionQueueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Everything to do today"
+      }
+    },
+    "/elasticity": {
+      "get": {
+        "description": "The demand curves S4.2 prices against, including the ones that are not there.\n\nNine of twenty-three cells could not be identified: their confidence\nintervals cover zero, and two of the thin ones came back at +8.60 and +1.61,\nwhich is a Poisson fit dividing by a price series with no variation in it\nrather than a finding. They are returned by default and flagged, because a\nchart of only the cells that worked would show a tidy demand curve across\nevery category and imply the last day was measured. It was not, in any\ncategory.",
+        "operationId": "elasticity_elasticity_get",
+        "parameters": [
+          {
+            "description": "L1 category, e.g. `Dairy & Eggs`",
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "L1 category, e.g. `Dairy & Eggs`",
+              "title": "Category"
+            }
+          },
+          {
+            "description": "Drop cells where no price response was established",
+            "in": "query",
+            "name": "identified_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Drop cells where no price response was established",
+              "title": "Identified Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElasticityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Price response by category and freshness"
       }
     },
     "/health": {

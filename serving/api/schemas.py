@@ -90,6 +90,59 @@ class ExpiryQueueResponse(BaseModel):
     meta: ResponseMeta
 
 
+class ElasticityCell(BaseModel):
+    """One category x freshness band, and whether it means anything.
+
+    `elasticity_usable` is null wherever S4.1 could not establish a downward
+    slope. That is the field a consumer should read: `elasticity_raw` is what
+    the fit returned, including the cells whose interval covers zero and the
+    two thin ones that came back at +8.60 and +1.61. Publishing only the raw
+    number would invite exactly the misreading the estimator exists to prevent.
+    """
+
+    l1_category: str
+    dte_band: str
+    min_days: int
+    max_days: int
+    observations: int
+    discounted_observations: int
+    elasticity_raw: float
+    standard_error: float
+    is_identified: bool
+    elasticity_usable: float | None
+    elasticity_basis: str
+
+
+class ElasticityResponse(BaseModel):
+    data: list[ElasticityCell]
+    meta: ResponseMeta
+
+
+class RecommendedAction(BaseModel):
+    """One thing to do today, from any of the four decision engines."""
+
+    action_type: str
+    store_id: str
+    sku_id: str
+    sku_name: str | None = None
+    l1_category: str | None = None
+    detail: str
+    units: float
+    value_inr: float
+    value_basis: str = Field(
+        description=(
+            "What value_inr measures. Not comparable across bases: a replenishment "
+            "line's rupees are money about to be spent, a transfer's are money saved."
+        )
+    )
+    rationale: str
+
+
+class ActionQueueResponse(BaseModel):
+    data: list[RecommendedAction]
+    meta: ResponseMeta
+
+
 class SourceFreshness(BaseModel):
     source_name: str
     last_seen_date: str | None
