@@ -244,7 +244,7 @@ Vite + React + ECharts against the existing API; deploy front-end on Vercel, API
 |---|---|---|
 | **G1** | End Sprint 1 | On-hand never negative; FEFO strictly oldest-first; every injected defect countable |
 | **G2** | End Sprint 2 | `agg_store_sku_day` revenue ties to raw order totals **exactly**; demo slice < 80 MB |
-| **G3** | End Sprint 3 | Live public URL; **no number on screen that isn't in `metrics.yml`** |
+| **G3** ✅ | End Sprint 3 | Live public URL; **no number on screen that isn't in `metrics.yml`** — **PASSED**, [live](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/). Note `cache_resource` outlives a code update in a warm container, so the client cache is keyed on its own interface. |
 | **G4** | End Sprint 4 | Markdown depth increases monotonically as DTE falls, holding the demand **rate** constant — **and the sweep must move**: run at an inelastic coefficient every depth is zero and "non-decreasing" passes while testing nothing. `test_an_inelastic_coefficient_makes_the_g4_sweep_vacuous` holds that shut. |
 | **G5** | End Sprint 5 | Experiment reproducible from a seed; every resume number traceable to `mart_experiment_readout` |
 
