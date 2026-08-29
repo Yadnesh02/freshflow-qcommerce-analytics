@@ -219,6 +219,16 @@ def t_markdown(args: argparse.Namespace) -> int:
     return py("-m", "analytics.optimization.markdown", "--budget", str(args.budget))
 
 
+def t_newsvendor(args: argparse.Namespace) -> int:
+    """Perishable newsvendor order-up-to levels, capped by shelf life."""
+    return py(
+        "-m",
+        "analytics.optimization.newsvendor",
+        "--retention-cost",
+        str(args.retention_cost),
+    )
+
+
 def t_transfers(args: argparse.Namespace) -> int:
     """Recommend inter-store transfers of at-risk stock, gated on shelf life."""
     return py(
@@ -345,6 +355,7 @@ TARGETS = {
     "markdown": t_markdown,
     "deal-slots": t_deal_slots,
     "transfers": t_transfers,
+    "newsvendor": t_newsvendor,
     "recommend": t_recommend,
     "experiment": t_experiment,
     "demo-slice": t_demo_slice,
@@ -388,6 +399,13 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "newsvendor":
+            p.add_argument(
+                "--retention-cost",
+                type=float,
+                default=0.0,
+                help="AN ASSUMPTION: rupees of retention damage per unit short",
+            )
         if name == "transfers":
             p.add_argument(
                 "--fixed-trip-cost",
