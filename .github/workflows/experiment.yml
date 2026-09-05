@@ -1,0 +1,150 @@
+name: experiment
+
+# The policy A/B backtest: 30 seeds x 2 arms, one runner per seed (task S5.1).
+#
+# **Why a matrix rather than a loop.** The arms are independent given a seed, so
+# thirty seeds is thirty independent runs and the fan-out is free on a public
+# repository. Serially this is two to three hours; here it is roughly the length
+# of one seed. That is not only a speed argument - it is what makes re-running
+# the whole experiment cheap enough that nobody is tempted to reuse a stale
+# result because regenerating it would cost an afternoon.
+#
+# **Why this needs no warehouse.** The harness reads
+# `simulator/config/policy_bundle.json`, which is committed, and nothing else.
+# That falls out of S4.6: Policy B reads a parameter bundle rather than the
+# `rec_*` tables, because those were fitted on the whole year and a policy
+# reading its own row on day 120 would be reading day 300. So an experiment job
+# checks out the repo and starts simulating - no 1.8 GB download, no shared
+# state between jobs, nothing to serialise.
+#
+# **On invoking the module directly rather than through tasks.py.** The seed
+# comes from the matrix, so the command carries a `${{ }}` expression, and
+# tests/test_task_runner.py parses every `tasks.py` invocation in every workflow
+# against the real argparse definition - an expression defeats that. Rather than
+# weaken the test, the matrix step calls the module and `tasks.py experiment`
+# stays the entry point for the readout, which takes no arguments.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Simulated days per arm"
+        type: string
+        default: "90"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experiment
+  cancel-in-progress: false
+
+jobs:
+  arms:
+    name: seed ${{ matrix.seed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # One bad seed must not cancel the other twenty-nine. A run that loses a
+      # seed is still readable - the readout says how many it had - whereas a
+      # cancelled matrix leaves nothing to look at and no way to tell whether
+      # the failure was specific to that seed.
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        seed:
+          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+           21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # The harness refuses to run if the arms do not share their draws, so a
+      # regression in the substream layout costs one job rather than thirty and
+      # is reported as a cause rather than as a noisier estimate.
+      - name: Both arms
+        run: >
+          uv run python -m simulator.experiment
+          --seed ${{ matrix.seed }}
+          --days ${{ inputs.days }}
+          --out data/experiment
+
+      - name: Upload this seed
+        uses: actions/upload-artifact@v4
+        with:
+          name: seed-${{ matrix.seed }}
+          path: data/experiment/*.parquet
+          retention-days: 30
+          if-no-files-found: error
+
+  collect:
+    name: collect
+    needs: arms
+    # `always()` so a run that lost a seed still produces a readable result. The
+    # collect step records how many seeds it actually found, so a short run
+    # announces itself rather than quietly reporting a thinner experiment as if
+    # it were the full one.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Download every seed
+        uses: actions/download-artifact@v4
+        with:
+          pattern: seed-*
+          path: data/experiment
+          merge-multiple: true
+
+      - name: Combine
+        run: |
+          set -euo pipefail
+          uv run python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+
+          out = Path("data/experiment")
+          files = sorted(out.glob("seed_*.parquet"))
+          if not files:
+              raise SystemExit("no seed files were downloaded")
+          frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+          seeds = sorted(frame["seed"].unique())
+          print(f"  {len(files)} seed files, {len(seeds)} seeds, {len(frame):,} rows")
+          if len(seeds) < 30:
+              print(f"  WARNING: {30 - len(seeds)} seeds missing: "
+                    f"{sorted(set(range(1, 31)) - set(seeds))}")
+          frame.to_parquet(out / "arms.parquet", index=False)
+          print(frame.groupby("arm")[["units_expired", "writeoff_value", "revenue"]].sum())
+          PY
+
+      - name: Upload the combined result
+        uses: actions/upload-artifact@v4
+        with:
+          name: experiment-arms
+          path: data/experiment/arms.parquet
+          retention-days: 90
+          if-no-files-found: error
