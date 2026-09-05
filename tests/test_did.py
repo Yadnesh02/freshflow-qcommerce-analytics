@@ -154,3 +154,43 @@ def test_a_pre_period_divergence_contaminates_the_estimate() -> None:
     result = estimate(frame, "units_expired")
     assert abs(result.effect) > 5.0, "the divergence should show up as a spurious effect"
     assert result.p_value < 0.05, "and it should look statistically convincing"
+
+
+def test_the_combined_panel_is_readable_not_just_the_per_seed_files(tmp_path) -> None:
+    """The artifact anybody downloads is the merged one, and it must just work.
+
+    `holdout.yml` writes `seed_NNN.parquet` on each matrix runner and uploads a
+    merged `holdout.parquet` from the collecting job. Only the merged file
+    survives an artifact download, and the first version of `load` globbed
+    `seed_*` alone - so `tasks.py did` reported "no holdout runs" while looking
+    directly at the output its own workflow had just produced.
+    """
+    from analytics.experiment.did import load
+
+    frame = panel(effect=-5.0, seeds=4)
+    (tmp_path / "holdout.parquet").write_bytes(b"")  # replaced below, just reserving the name
+    frame.to_parquet(tmp_path / "holdout.parquet", index=False)
+
+    loaded = load(tmp_path)
+    assert loaded["seed"].nunique() == 4
+    assert estimate(loaded, "units_expired").effect == pytest.approx(-5.0)
+
+
+def test_having_both_spellings_present_does_not_double_count(tmp_path) -> None:
+    """A download next to a local run must not tighten the interval by duplication.
+
+    Concatenating the per-seed files and the merged panel would count every seed
+    twice, which halves the standard error and doubles the apparent precision
+    while changing no estimate - the most flattering way a bug like this could
+    present itself.
+    """
+    from analytics.experiment.did import load
+
+    frame = panel(effect=-5.0, seeds=4)
+    frame.to_parquet(tmp_path / "holdout.parquet", index=False)
+    for seed, group in frame.groupby("seed"):
+        group.to_parquet(tmp_path / f"seed_{seed:03d}.parquet", index=False)
+
+    loaded = load(tmp_path)
+    assert len(loaded) == len(frame), "seeds were counted twice"
+    assert loaded["seed"].nunique() == 4

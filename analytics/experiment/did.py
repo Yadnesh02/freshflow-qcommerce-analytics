@@ -58,12 +58,28 @@ class Estimate:
 
 
 def load(directory: Path = HOLDOUT_DIR) -> pd.DataFrame:
-    files = sorted(directory.glob("seed_*.parquet"))
+    """Read either the per-seed files or the combined panel.
+
+    Both spellings exist and both are things a person will actually have.
+    `holdout.yml` writes `seed_NNN.parquet` on each matrix runner and then
+    uploads a merged `holdout.parquet` from the collecting job - and the merged
+    one is what anybody downloading the artifact ends up with. The first version
+    of this globbed only `seed_*`, so `tasks.py did` reported "no holdout runs"
+    while staring at the file the workflow had just produced.
+    """
+    files = sorted(directory.glob("seed_*.parquet")) or sorted(directory.glob("*.parquet"))
     if not files:
-        raise SystemExit(f"no holdout runs in {directory} - run `python -m simulator.holdout`")
+        raise SystemExit(
+            f"no holdout runs in {directory}\n"
+            "  run `python -m simulator.holdout --seed N`, or download the\n"
+            "  holdout-panel artifact from a holdout.yml run and unzip it there"
+        )
     frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     frame["margin"] = frame["revenue"] - frame["cogs"]
-    return frame
+    # The combined panel and the per-seed files can both be present after a
+    # download; dropping exact duplicates keeps that from double-counting seeds
+    # into a spuriously tight confidence interval.
+    return frame.drop_duplicates(subset=["seed", "store_id", "day_rel"], ignore_index=True)
 
 
 def seed_did(frame: pd.DataFrame, metric: str) -> float:
