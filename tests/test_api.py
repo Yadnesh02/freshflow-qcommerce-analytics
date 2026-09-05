@@ -63,6 +63,43 @@ def con():
     connection.close()
 
 
+@pytest.fixture(scope="module")
+def expiry_queue(client):
+    """Skip when `mart_expiry_risk` has not been built, and say where it is checked.
+
+    The mart is produced by `tasks.py expiry-risk`, which needs
+    `mart_demand_forecast`, which needs a forecast trained on real history -
+    and that cannot run on CI's 30-day slice at all: feature construction
+    consumes the lag window and LightGBM gets zero training rows.
+
+    So the fast lane cannot exercise this endpoint's success path, and pretending
+    otherwise is what kept CI red for sixteen runs. It is covered instead by
+    `warehouse.yml`, which builds the full year and runs this same file. The
+    absence path is not skipped either - see
+    `test_the_expiry_queue_degrades_with_an_actionable_message`.
+    """
+    if client.get("/actions/expiry", params={"limit": 1}).status_code == 503:
+        pytest.skip("mart_expiry_risk is not built; the full-year path runs in warehouse.yml")
+
+
+def test_the_expiry_queue_degrades_with_an_actionable_message(client) -> None:
+    """An unbuilt mart must produce a 503 that names its own fix, not a 500.
+
+    This is the half of the contract the fast lane *can* hold, and it is worth
+    holding on its own merits: the endpoint is expected to be hit before the
+    decision engines have ever run, and "500 Internal Server Error" would send
+    somebody reading tracebacks for a pipeline step they simply had not run yet.
+    Without this, gating the tests above on the mart would leave nothing at all
+    asserted about the endpoint on most pushes - a skip that never expires.
+    """
+    response = client.get("/actions/expiry", params={"limit": 1})
+    assert response.status_code in (200, 503), f"unexpected {response.status_code}"
+    if response.status_code == 503:
+        detail = response.json()["detail"]
+        assert "mart_expiry_risk" in detail, "the 503 does not name the missing mart"
+        assert "tasks.py expiry-risk" in detail, "the 503 does not name the command that fixes it"
+
+
 # ================================================== the gate
 def test_the_openapi_page_loads(client) -> None:
     """S3.7's gate, literally."""
@@ -75,13 +112,24 @@ def test_the_openapi_page_loads(client) -> None:
 
 
 def test_every_response_echoes_its_sql(client) -> None:
-    """The other half of the gate, on all three endpoints."""
-    for path, params in (
+    """The other half of the gate, on every endpoint that has data to serve.
+
+    `/actions/expiry` is included when its mart exists and skipped when it does
+    not, rather than the whole test being gated: the other two endpoints carry
+    the same guarantee and are checkable on any warehouse. A 503 from an unbuilt
+    mart is a documented response with its own test, not a failure of the echo
+    contract.
+    """
+    endpoints = [
         ("/metrics/gm_awm", {"dimensions": "store", "limit": 3}),
         ("/actions/expiry", {"limit": 3}),
         ("/health/freshness", {}),
-    ):
-        meta = client.get(path, params=params).json()["meta"]
+    ]
+    for path, params in endpoints:
+        response = client.get(path, params=params)
+        if response.status_code == 503:
+            continue
+        meta = response.json()["meta"]
         assert meta["sql"].strip().lower().startswith("select"), f"{path} echoed no statement"
         assert "generated_at" in meta and meta["rows"] >= 0
 
@@ -107,7 +155,23 @@ def test_the_echoed_sql_is_the_sql_that_ran(client, con) -> None:
     replayed = con.execute(body["meta"]["sql"], body["meta"]["params"]).fetchall()
 
     assert len(replayed) == len(body["data"]), "the echoed SQL returns a different row count"
-    served = [tuple(row.values()) for row in body["data"]]
+
+    # Sorted on the key before comparing, because the compiled metric carries no
+    # ORDER BY and DuckDB is under no obligation to return grouped rows in a
+    # stable sequence - it aggregates in parallel and emits partitions as they
+    # finish. Comparing positionally asserts something about the scheduler, and
+    # it duly passed on the full-year warehouse and failed on CI's 30-day slice
+    # with the same rows in a different order ('Staples & Packaged Food' where
+    # 'Baby & Pet Care' was expected). What the echo has to reproduce is the
+    # answer, not the order nobody asked for.
+    #
+    # Worth separating from this test: the same absence of an ORDER BY means a
+    # `limit` without one returns an arbitrary subset rather than a defined
+    # one. That is a property of the resolver, not of the echo, and is tracked
+    # apart from here.
+    key = lambda row: tuple("" if v is None else str(v) for v in row)  # noqa: E731
+    served = sorted((tuple(row.values()) for row in body["data"]), key=key)
+    replayed = sorted(replayed, key=key)
     for replayed_row, served_row in zip(replayed, served, strict=True):
         assert len(replayed_row) == len(served_row)
         for replayed_value, served_value in zip(replayed_row, served_row, strict=True):
@@ -229,7 +293,9 @@ def test_slicing_outside_the_declared_grain_warns(client) -> None:
 
 
 # ================================================== the action queue
-def test_the_expiry_queue_ranks_by_money_and_excludes_the_unactionable(client) -> None:
+def test_the_expiry_queue_ranks_by_money_and_excludes_the_unactionable(
+    client, expiry_queue
+) -> None:
     """Already-expired stock is a booked loss; ranking it above stock a markdown
     could still save would hand someone a list they cannot act on."""
     body = client.get("/actions/expiry", params={"limit": 25}).json()
@@ -241,7 +307,7 @@ def test_the_expiry_queue_ranks_by_money_and_excludes_the_unactionable(client) -
     assert all(row["days_to_expiry"] >= 0 for row in body["data"])
 
 
-def test_the_expiry_queue_filters_by_store_and_by_value(client) -> None:
+def test_the_expiry_queue_filters_by_store_and_by_value(client, expiry_queue) -> None:
     everything = client.get("/actions/expiry", params={"limit": 200}).json()["data"]
     store = everything[0]["store_id"]
 
@@ -254,7 +320,7 @@ def test_the_expiry_queue_filters_by_store_and_by_value(client) -> None:
 
 
 # ================================================== freshness
-def test_freshness_reports_every_source_and_flags_the_known_outage(client) -> None:
+def test_freshness_reports_every_source_and_flags_the_known_outage(client, full_year) -> None:
     """dq_source_coverage tracks partitions a feed was supposed to produce, so a
     feed that stopped is distinguishable from one with nothing to send. Defect 8
     removed two clickstream days, and this is where that becomes visible."""

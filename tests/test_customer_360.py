@@ -77,7 +77,7 @@ def delivery_cost() -> float:
 
 
 # ==================================================== the gate
-def test_pooled_retention_decays_monotonically_from_its_peak(con) -> None:
+def test_pooled_retention_decays_monotonically_from_its_peak(con, full_year) -> None:
     """S3.5's gate.
 
     Measured from M1, not M0, and that is a property of signup cohorts rather
@@ -191,7 +191,7 @@ def test_every_segment_is_populated(con) -> None:
     assert found == SEGMENTS, f"segments never assigned to anyone: {SEGMENTS - found}"
 
 
-def test_at_risk_customers_are_actually_valuable_and_lapsed(con) -> None:
+def test_at_risk_customers_are_actually_valuable_and_lapsed(con, full_year) -> None:
     """The segment the whole grid exists to surface.
 
     Frequency over the recent window correlates -0.55 with recency, so "used to
@@ -349,6 +349,12 @@ def test_the_retention_windows_do_not_overlap(con) -> None:
     )
 
 
+# Metrics whose window is longer than any single 90-day span. Kept as a named
+# set rather than a string check on the SQL, because "90d" appears in the other
+# expressions too - they just use one window rather than comparing two.
+NEEDS_TWO_WINDOWS = {"retention_90d"}
+
+
 @pytest.mark.parametrize(
     ("metric", "expression"),
     [
@@ -381,8 +387,21 @@ def test_the_retention_windows_do_not_overlap(con) -> None:
         ),
     ],
 )
-def test_registry_ratio_metrics_stay_inside_their_declared_bounds(con, metric, expression) -> None:
+def test_registry_ratio_metrics_stay_inside_their_declared_bounds(
+    con, dataset_days, metric, expression
+) -> None:
     """Each metric declares `between: [0.0, 1.0]`. Run its own SQL and check."""
+    # retention_90d is the only one here that spans *two* consecutive 90-day
+    # windows - it asks who was active in both - so it needs 180 days of
+    # history before it is defined at all, and on a shorter dataset its
+    # denominator is empty. The other ratios are single-window and hold on any
+    # dataset, so gating the whole parametrisation would stop checking two
+    # metrics that work perfectly well in the fast lane.
+    if metric in NEEDS_TWO_WINDOWS and dataset_days < 180:
+        pytest.skip(
+            f"{metric} compares two 90-day windows; this warehouse covers {dataset_days} days. "
+            "warehouse.yml runs the full year, which is where this one is checked."
+        )
     value = one(con, f"select {expression} from marts.mart_customer_360")
     assert value is not None, f"{metric} evaluates to null over the whole table"
     assert 0.0 <= value <= 1.0, f"{metric} computes {value:.4f}, outside its declared [0, 1]"

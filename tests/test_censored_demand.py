@@ -130,7 +130,7 @@ def test_a_category_with_little_evidence_does_not_get_a_distinctive_curve(con) -
     assert thinnest[2] < 0.8, f"{thinnest[0]} keeps {thinnest[2]:.2f} of a curve built on noise"
 
 
-def test_every_category_keeps_some_of_its_own_shape(con) -> None:
+def test_every_category_keeps_some_of_its_own_shape(con, full_year) -> None:
     """Shrinkage that collapsed everything to global would erase the signal."""
     weakest = one(con, "select min(signal_weight) from marts.agg_intraday_arrival_curve")
     assert weakest > 0.25, f"a category was shrunk to {weakest:.2f} - that is not a blend"
