@@ -94,6 +94,25 @@ jobs:
       - name: Build the warehouse
         run: uv run python tasks.py build --full-refresh
 
+      # Sprint 3's forecast chain, which the first draft of this workflow left
+      # out and run #1 failed on: `expiry-risk` needs `mart_demand_forecast`,
+      # `forecast` needs `mart_forecast_accuracy`, and only `backtest` produces
+      # that. Each module states its own prerequisite in its failure message,
+      # which is how the gap was found - but the workflow is where the order
+      # actually has to be written down.
+      #
+      # These are ten explicit steps rather than one `tasks.py all` because
+      # `t_all` is currently broken: it calls `t_recommend`, which imports
+      # `analytics.optimization.run_all`, a module that does not exist. Its
+      # `not_yet` guard tests for `markdown.py`, which has existed since S4.2,
+      # so the guard stopped firing while the module was never written. Worth
+      # fixing, and then this block collapses into one step and cannot drift.
+      - name: Backtest the forecast baselines
+        run: uv run python tasks.py backtest
+
+      - name: Train the demand forecast
+        run: uv run python tasks.py forecast
+
       # The five Sprint 4 engines. Ordered by dependency: expiry risk scores the
       # batches everything else reasons about, and elasticity is fitted before
       # the markdown optimiser can read a coefficient.
