@@ -163,6 +163,14 @@ jobs:
       - name: Published figures
         run: uv run python tasks.py published
 
+      # S5.3's analysis-side sensitivity. It needs no simulation - it recomputes
+      # contribution from the warehouse that was just built, at a delivery cost
+      # the event stream never carried - so it belongs on the authoritative
+      # build rather than in the sweep matrix, which would have implied a
+      # compute cost it does not have.
+      - name: Delivery-cost crossover
+        run: uv run python tasks.py delivery-sweep
+
       # The Python contract tests that need a warehouse - the staging contract
       # asserts each injected defect was repaired by the amount dirt.json says
       # was injected, which dbt's own tests cannot check because they only see

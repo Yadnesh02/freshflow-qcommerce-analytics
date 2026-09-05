@@ -211,6 +211,11 @@ def t_did(_: argparse.Namespace) -> int:
     return py("-m", "analytics.experiment.did")
 
 
+def t_delivery_sweep(args: argparse.Namespace) -> int:
+    """Contribution by discount-dependency band across delivery costs Rs 0-70."""
+    return py("-m", "analytics.delivery_cost", "--warehouse", str(args.warehouse))
+
+
 def t_sensitivity(_: argparse.Namespace) -> int:
     """Which findings survive the parameter sweep."""
     if not (ROOT / "analytics" / "experiment" / "sensitivity.py").exists():
@@ -405,6 +410,7 @@ TARGETS = {
     "experiment": t_experiment,
     "did": t_did,
     "sensitivity": t_sensitivity,
+    "delivery-sweep": t_delivery_sweep,
     "demo-slice": t_demo_slice,
     "publish-demo": t_publish_demo,
     "api": t_api,
@@ -446,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
-        if name in ("anchors", "published"):
+        if name in ("anchors", "published", "delivery-sweep"):
             p.add_argument(
                 "--warehouse",
                 type=Path,

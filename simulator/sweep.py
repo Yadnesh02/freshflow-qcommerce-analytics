@@ -45,6 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from simulator.catalog import build_catalog  # noqa: E402
 from simulator.config_loader import load_sim_config  # noqa: E402
 from simulator.policies.holdout import HoldoutPolicy, assign_treatment  # noqa: E402
 from simulator.policies.optimized import BUNDLE_PATH, OptimizedPolicy  # noqa: E402
@@ -88,9 +89,40 @@ def perturbed_bundle(param: str, value: float) -> dict:
     else:
         raise SystemExit(
             f"unknown parameter {param!r} - expected disposal_cost, elasticity_scale, "
-            "lead_time_scale or dispersion_scale"
+            "lead_time_scale, dispersion_scale or shelf_life_shorter_days"
         )
     return edited
+
+
+# Parameters that change the WORLD rather than what the policy believes, and
+# the distinction is not pedantry. A bundle sweep asks what a wrong belief
+# costs, holding the world fixed, so the control group is unaffected and the
+# comparison stays clean. A world sweep changes the ground both arms stand on:
+# shelf life is a property of the catalogue that the simulator and Policy B both
+# read, so shortening it makes the world harsher AND tells everybody. That is
+# the honest reading of "shelf life -1 day" - not "the policy is wrong about
+# shelf life", which would be a different experiment - and it means the holdout
+# group moves too, which is exactly why it must be labelled differently in the
+# table rather than sitting alongside the belief sweeps as though it were one.
+WORLD_PARAMS = frozenset({"shelf_life_shorter_days"})
+
+
+def perturbed_catalog(seed: int, param: str, value: float):
+    """The catalogue with one property of the world changed."""
+    catalog = build_catalog(load_sim_config(), seed=seed)
+    if param == "shelf_life_shorter_days":
+        # Named for how many days SHORTER rather than as a signed delta, so no
+        # setting ever carries a minus sign. The workflow encodes settings as
+        # "param-value" and splits on the last hyphen, which a negative number
+        # would break silently - "shelf_life_delta--1" divides into
+        # "shelf_life_delta-" and "1". A naming choice, made because the
+        # alternative fails after the job has already run.
+        shifted = catalog["shelf_life_days"] - int(value)
+        # Never below a day: a zero-day shelf life is not a harsher world, it is
+        # stock that expires before it can be received, and the run would be
+        # measuring an arithmetic edge rather than a policy.
+        catalog = catalog.assign(shelf_life_days=shifted.clip(lower=1))
+    return catalog
 
 
 def run_setting(
@@ -104,22 +136,30 @@ def run_setting(
     cfg = load_sim_config()
     scratch = Path(tempfile.mkdtemp(prefix=f"ff-sweep-{param}-{seed}-"))
     try:
+        world = param in WORLD_PARAMS
+        catalog = perturbed_catalog(seed, param, value) if world else None
         bundle_path = scratch / "bundle.json"
-        bundle_path.write_text(json.dumps(perturbed_bundle(param, value)), encoding="utf-8")
+        if not world:
+            bundle_path.write_text(json.dumps(perturbed_bundle(param, value)), encoding="utf-8")
 
-        probe = SimulationRun(cfg, seed=seed, days=1, out_dir=scratch, quiet=True)
+        probe = SimulationRun(cfg, seed=seed, days=1, out_dir=scratch, quiet=True, catalog=catalog)
         calendar = sorted(probe.demand.factors)[:days]
         switch_date = calendar[pre_days]
         treated = assign_treatment(probe.S, seed=seed)
         treated_ids = {probe.store_ids[i] for i in treated}
 
         policy = HoldoutPolicy(cfg, probe.catalog, treated, switch_date)
-        # Only the treated arm's beliefs are perturbed. The holdout is the
-        # baseline and has no bundle - perturbing it would change the control
-        # group, and a control that moves with the treatment is not a control.
-        policy.optimized = OptimizedPolicy(cfg, probe.catalog, bundle_path=bundle_path)
+        if not world:
+            # Only the treated arm's beliefs are perturbed. The holdout is the
+            # baseline and has no bundle - perturbing it would change the
+            # control group, and a control that moves with the treatment is not
+            # a control. A world sweep is the deliberate exception: both arms
+            # stand on the same changed ground.
+            policy.optimized = OptimizedPolicy(cfg, probe.catalog, bundle_path=bundle_path)
 
-        run = SimulationRun(cfg, seed=seed, days=days, out_dir=scratch, quiet=True, policy=policy)
+        run = SimulationRun(
+            cfg, seed=seed, days=days, out_dir=scratch, quiet=True, policy=policy, catalog=catalog
+        )
         run.run()
         frame = pd.DataFrame(run.store_summary)
     finally:
@@ -127,6 +167,7 @@ def run_setting(
 
     frame["seed"] = seed
     frame["param"] = param
+    frame["world_change"] = param in WORLD_PARAMS
     frame["value"] = float(value)
     frame["treated"] = frame["store_id"].isin(treated_ids)
     frame["post"] = frame["date"] >= switch_date

@@ -115,6 +115,11 @@ class SimulationRun:
     # arguments would push that knowledge into every caller that only ever wants
     # one of the two arms.
     policy: Policy | None = None
+    # An already-built catalogue, used instead of building one from the seed.
+    # S5.3's shelf-life sweep needs a *world* that differs, not a policy that
+    # believes something wrong, and shelf life is a property of the catalogue
+    # that both the simulator and Policy B read.
+    catalog: pd.DataFrame | None = None
 
     summary: list[dict] = field(default_factory=list)
     store_summary: list[dict] = field(default_factory=list)
@@ -124,7 +129,8 @@ class SimulationRun:
         # Everything inside `_step` now draws from a per-day, per-component
         # substream instead - see `_substream` and the note on COMPONENT below.
         self.rng = np.random.default_rng([self.seed, 1])
-        self.catalog = build_catalog(self.cfg, seed=self.seed)
+        if self.catalog is None:
+            self.catalog = build_catalog(self.cfg, seed=self.seed)
         self.demand = DemandModel(self.cfg, self.catalog, seed=self.seed)
         self.customers = CustomerBase(self.cfg, seed=self.seed)
         self.baskets = BasketAssembler(self.cfg, self.catalog, self.customers)

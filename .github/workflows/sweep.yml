@@ -65,6 +65,12 @@ jobs:
           # days for everything and Policy B's whole lead-time advantage is
           # believing the per-category p90. What if that belief is 30% wrong?
           - lead_time_scale-1.3
+          # A WORLD change, not a belief: shelf life is a property of the
+          # catalogue that the simulator and Policy B both read, so this makes
+          # the world harsher and tells everybody. Named "shorter_days" so no
+          # setting carries a minus sign - the split is on the last hyphen and a
+          # negative would divide in the wrong place, after the job had run.
+          - shelf_life_shorter_days-1
 
     steps:
       - uses: actions/checkout@v4
