@@ -193,19 +193,65 @@ This is the sprint that must land. Everything after it is upside.
 
 ---
 
-## 9. Sprint 5 — Proof & polish (4–5 sessions, ~12h)
+## 9. Sprint 5 — Proof & polish (6–7 sessions, ~22h)
 
-| ID | Task | Est | Acceptance gate |
-|---|---|---|---|
-| **S5.1** | Experiment harness: 30 seeds × 90 days × 2 policies, **common random numbers** | 3h | Same seed reproduces identical demand under both policies — assert it |
-| **S5.2** | Store-level randomized holdout + DiD with parallel-trends check; restrict transfers within arms (SUTVA) | 2.5h | Pre-period trends parallel; DiD estimate with CI |
-| **S5.3** | Sensitivity: elasticity ±30%, forecast error ×1.5, shelf life −1 day, **delivery cost ₹0–₹70/order**, **markdown disposal cost ₹0–₹50/unit** | 2h | Table of which findings survive — and the two conclusions that already do not |
-| **S5.4** | Ablation: B minus each component, attribute the gain | 1.5h | Per-component contribution sums ≈ total |
-| **S5.5** | `mart_experiment_readout` + Executive page readout | 1.5h | Table from plan §10 filled with **real** numbers |
-| **S5.6** | Dagster asset graph, daily schedule, asset checks | 2.5h | `dagster dev` shows the full DAG; screenshot for README |
-| **S5.7** | Streamlit page 6 (Data Quality) + Soda freshness checks | 1.5h | Injected staleness triggers an alert |
-| **S5.8** | `sql_showcase/` — 15 documented queries | 2.5h | Each runs against the warehouse; each has the business question in a comment |
-| **S5.9** | `docs/business_case.pdf` (2 pages), OBS walkthrough video, ADRs, final README | 2.5h | §14 checklist complete |
+### 9.0 Where Sprint 5 runs, and why it moved
+
+On **2026-09-05** `mdsched.exe` returned Windows Memory Diagnostic events **1102 and 1202**:
+*"tested the computer's memory and detected hardware errors."* The development laptop has
+faulty non-ECC RAM. One fact, and it explains every unexplained failure of the preceding ten
+days — the `FF-LPA-00` phantom store (a one-bit `0x31 → 0x30` flip), the `1.5e+150` returned
+for a value of ~292, the repeated `0xC0000005` access violations, DuckDB's "Invalid unicode
+in segment statistics update", and fifteen Kernel-Power 41 criticals.
+
+**The consequence for this sprint is not inconvenience, it is admissibility.** The phantom
+store changed no row count and no revenue total — every aggregate still tied, and it was
+caught only because one foreign-key test happened to exist. Hardware that can alter a value
+undetectably cannot produce a number G5 will accept, and checking totals will not tell you
+when it has.
+
+So Sprint 5 splits its compute three ways:
+
+| Environment | What it is for | Cost |
+|---|---|---|
+| **GitHub Actions** — the authoritative one | Every figure that reaches the README, the app or the résumé. Built from a seed, on a clean runner, against the pinned lockfile. | Free and unlimited — the repo is public |
+| **Codespaces** (4-core; the devcontainer is already fit for it) | Interactive iteration, running the app, exploratory queries | 120 core-hours/month free, about 30h at 4-core |
+| **The laptop** | Editing, git, reading. **Not** producing figures. | — until the RAM is replaced and `mdsched` comes back clean |
+
+**The rule for the rest of the project: if a number appears in the README, on the app, or on
+the résumé, a workflow file produced it.** Read that as a strengthening of G5 rather than a
+workaround for broken hardware. An experiment that ran in CI from a seed, on a locked
+dependency set, and uploaded its readout as a build artifact is re-runnable by anyone who
+clones the repo. An experiment that ran on somebody's laptop is a number asking to be trusted.
+
+**What makes this cheap is a decision already taken in S4.6: `simulator/config/policy_bundle.json`
+is committed.** The harness reads its parameters from that bundle and never from the `rec_*`
+tables, so an experiment job needs the repository and nothing else — no warehouse, no 1.8 GB
+download, no state shared between jobs. Thirty seeds is thirty independent runners, and the
+matrix is free.
+
+### 9.1 Tasks
+
+| ID | Task | Est | Runs on | Acceptance gate |
+|---|---|---|---|---|
+| **S5.0** | `warehouse.yml` — the full-year build in Actions: 365-day simulate → `dbt build` → the five optimisers → demo slice → publish. Raise the 20-minute timeout the existing workflows carry. | 2h | Actions | **The seven anchors reproduce on a clean runner**: net revenue 434,304,805.80, 4,259,103 order items, 6,324,295 agg rows, 23 elasticity cells, 758 `rec_markdown`, ₹78,86,876.54 written off, 14 distinct stores. Anything that disagrees means the laptop-built figure was the wrong one, and this document is what gets corrected. |
+| **S5.1** | Experiment harness + `experiment.yml`: 30 seeds × 90 days × 2 policies as a **job matrix**, one seed per runner, **common random numbers** | 3.5h | Actions | Same seed reproduces identical demand under both policies — asserted **inside the workflow**, so a regression fails the build rather than a local run nobody repeated |
+| **S5.2** | Store-level randomized holdout + DiD with parallel-trends check; restrict transfers within arms (SUTVA) | 2.5h | Actions | Pre-period trends parallel; DiD estimate with CI |
+| **S5.3** | Sensitivity: elasticity ±30%, forecast error ×1.5, shelf life −1 day, **delivery cost ₹0–₹70/order**, **markdown disposal cost ₹0–₹50/unit** | 2h | Actions (matrix over the sweep) | Table of which findings survive — and the two conclusions that already do not |
+| **S5.4** | Ablation: B minus each component, attribute the gain | 1.5h | Actions (matrix over components) | Per-component contribution sums ≈ total |
+| **S5.5** | `mart_experiment_readout` + Executive page readout. Results land as parquet under `data/experiment/`, read by a dbt source via `external_location` like the other thirteen. | 2h | Actions, then committed | Table from plan §10 filled with **real** numbers, and the mart rebuilds from committed results on any clone |
+| **S5.6** | Dagster asset graph, daily schedule, asset checks | 2.5h | Codespace | `dagster dev` shows the full DAG; screenshot for README |
+| **S5.7** | Streamlit page 6 (Data Quality) + Soda freshness checks | 1.5h | Codespace | Injected staleness triggers an alert |
+| **S5.8** | `sql_showcase/` — 15 documented queries | 2.5h | Codespace, verified in Actions | Each runs against the warehouse; each has the business question in a comment |
+| **S5.9** | `docs/business_case.pdf` (2 pages), OBS walkthrough video, ADRs, final README | 2.5h | anywhere | §14 checklist complete |
+
+> **S5.0 comes first and nothing else may start before it.** The warehouse on the laptop, and
+> the demo slice published from it on 2026-09-05 (`83e93cc2…`), were both produced on the
+> faulty RAM. Neither is known to be wrong — the seven anchors did tie — but "not known to be
+> wrong" is precisely what the phantom store looked like the day before it was found.
+> Compare the anchors and the non-float columns, **not** a whole-file sha256:
+> `mart_customer_360` is legitimately not bit-reproducible across rebuilds, because DuckDB
+> sums floats in whatever order its threads finish.
 
 **Two assumptions are already known to flip a stated conclusion, and S5.3 owns both.**
 Neither is a measurement; each is a single declared parameter that the event stream
@@ -246,7 +292,7 @@ Vite + React + ECharts against the existing API; deploy front-end on Vercel, API
 | **G2** | End Sprint 2 | `agg_store_sku_day` revenue ties to raw order totals **exactly**; demo slice < 80 MB |
 | **G3** ✅ | End Sprint 3 | Live public URL; **no number on screen that isn't in `metrics.yml`** — **PASSED**, [live](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/). Note `cache_resource` outlives a code update in a warm container, so the client cache is keyed on its own interface. |
 | **G4** | End Sprint 4 | Markdown depth increases monotonically as DTE falls, holding the demand **rate** constant — **and the sweep must move**: run at an inelastic coefficient every depth is zero and "non-decreasing" passes while testing nothing. `test_an_inelastic_coefficient_makes_the_g4_sweep_vacuous` holds that shut. |
-| **G5** | End Sprint 5 | Experiment reproducible from a seed; every resume number traceable to `mart_experiment_readout` |
+| **G5** | End Sprint 5 | Experiment reproducible from a seed; every resume number traceable to `mart_experiment_readout`. **Sharpened 2026-09-05:** reproducible *in CI* — a workflow anyone can re-run from a clone, not a run that happened once on one machine. The hardware fault that forced this is the best argument for it. |
 
 G3 and G5 are the two that matter most. G3 makes you employable-with-a-link. G5 makes every number on your resume defensible.
 
@@ -262,14 +308,23 @@ Add this as a pytest that walks the import graph and fails on violation. It is a
 
 ## 13. Timeline against your Nov 2026 switch
 
-| Window | Milestone |
-|---|---|
-| Late Aug 2026 | Sprint 0 + Sprint 1 |
-| Early Sep | Sprint 2 |
-| **Mid Sep** | **Sprint 3 — resume updated, live link, start applying** |
-| Late Sep | Sprint 4 (+ start Project 2 in parallel) |
-| Early Oct | Sprint 5 — full proof |
-| Mid/Late Oct | Project 2 finish, interview prep, mock rounds |
-| Nov | Switch |
+| Window | Milestone | Actual |
+|---|---|---|
+| Late Aug 2026 | Sprint 0 + Sprint 1 | ✅ done, 26 Aug |
+| Early Sep | Sprint 2 | ✅ done **27 Aug** |
+| **Mid Sep** | **Sprint 3 — resume updated, live link, start applying** | ✅ done **28 Aug**; app live and public, **G3 confirmed 5 Sep** |
+| Late Sep | Sprint 4 (+ start Project 2 in parallel) | ✅ done **29 Aug** |
+| Early Oct | Sprint 5 — full proof | starting **5 Sep**, on Actions |
+| Mid/Late Oct | Project 2 finish, interview prep, mock rounds | |
+| Nov | Switch | |
 
-Applying from mid-September with a live link beats applying in November with a perfect one.
+**You are roughly three to four weeks ahead of this schedule.** Sprint 4 finished on 29 August
+against a plan that allowed until late September, and Sprint 5 is starting in the window the
+plan reserved for Sprint 4. That slack is what makes the hardware fault survivable rather than
+a crisis: the RAM can be replaced, and the compute move to Actions paid for, without touching
+the November date.
+
+**Spend part of that lead on applying, not only on building.** The live link exists and G3 is
+met, which is the whole trigger the plan set for updating the résumé. Applying from early
+September with a live link beats applying in November with a perfect one — and the plan's
+original line was written expecting mid-September at best.
