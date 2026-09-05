@@ -113,6 +113,9 @@ class SimulationRun:
     summary: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        # Kept for anything outside the daily loop that still wants one stream.
+        # Everything inside `_step` now draws from a per-day, per-component
+        # substream instead - see `_substream` and the note on COMPONENT below.
         self.rng = np.random.default_rng([self.seed, 1])
         self.catalog = build_catalog(self.cfg, seed=self.seed)
         self.demand = DemandModel(self.cfg, self.catalog, seed=self.seed)
@@ -300,6 +303,28 @@ class SimulationRun:
         return price
 
     # ------------------------------------------------------------------ one day
+    # Component ids for the per-day substreams. Arbitrary integers, but fixed:
+    # changing one changes every draw that component makes, and therefore the
+    # dataset.
+    #
+    # **Why substreams rather than one generator.** With a single stream, the
+    # number of draws taken on a day depends on the data - how many baskets were
+    # assembled, how many lines needed a second batch. Two policy arms diverge in
+    # that count on day one, so from day two onward the same seed feeds them
+    # different numbers, and common random numbers are lost precisely where the
+    # experiment needs them. Measured before this change: the arms shared draws
+    # for exactly one day.
+    #
+    # Deriving each component's generator from (seed, day, component) makes the
+    # draws positionally stable no matter what any other component consumed. The
+    # policy gets its own stream too, so a policy that starts drawing cannot
+    # move demand - which is a violation that would otherwise be invisible.
+    DEMAND, BASKETS, FULFIL, CLICKS, SUPPLY, POLICY, CHURN = 101, 102, 103, 104, 105, 106, 107
+
+    def _substream(self, ordinal: int, component: int) -> np.random.Generator:
+        """One component's generator for one day. Independent of every other."""
+        return np.random.default_rng([self.seed, ordinal, component])
+
     def _step(self, day: dt.date, rng: np.random.Generator) -> DayCounters:
         c = DayCounters()
         ord_ = day.toordinal()
@@ -345,6 +370,13 @@ class SimulationRun:
 
         # --- 3. today's prices, decided before customers see them -------------
         min_dte = self.ledger.min_dte_matrix(ord_)
+        demand_rng = self._substream(ord_, self.DEMAND)
+        basket_rng = self._substream(ord_, self.BASKETS)
+        fulfil_rng = self._substream(ord_, self.FULFIL)
+        click_rng = self._substream(ord_, self.CLICKS)
+        supply_rng = self._substream(ord_, self.SUPPLY)
+        policy_rng = self._substream(ord_, self.POLICY)
+
         ctx = PolicyContext(
             date=day,
             on_hand=self.ledger.on_hand_matrix.copy(),
@@ -353,7 +385,7 @@ class SimulationRun:
             min_dte=min_dte,
             store_open=store_open,
             catalog=self.catalog,
-            rng=rng,
+            rng=policy_rng,
         )
         discount = self.policy.markdown(ctx)
         deals = self.policy.deal_slots(ctx)
@@ -369,7 +401,7 @@ class SimulationRun:
         remaining = np.clip(avg_dte / np.maximum(self.shelf_life, 1)[None, :], 0.0, 1.0)
         lam = lam * np.where(avg_dte < 9999, freshness_multiplier(remaining, self.cfg), 1.0)
 
-        units = self.demand.sample(lam, rng)
+        units = self.demand.sample(lam, demand_rng)
         c.units_demanded = int(units.sum())
 
         # start today's sales slice clean, or a store that sold nothing would
@@ -387,7 +419,7 @@ class SimulationRun:
             if not store_open[si]:
                 continue
             orders, items = self.baskets.assemble(
-                si, units[si], day, by_store[si], rng, is_monsoon=is_monsoon
+                si, units[si], day, by_store[si], basket_rng, is_monsoon=is_monsoon
             )
             if orders.empty:
                 continue
@@ -412,7 +444,7 @@ class SimulationRun:
                 items["order_id"], items["sku_idx"], items["qty"], strict=True
             ):
                 allocs, lost, hit_stockout = self.fulfiller.fulfil_line(
-                    self.ledger, si, int(sku_idx), int(qty), ord_, rng
+                    self.ledger, si, int(sku_idx), int(qty), ord_, fulfil_rng
                 )
                 cust = cust_of[oid]
                 if hit_stockout:
@@ -510,7 +542,7 @@ class SimulationRun:
                 self._instock_history[slot, si, sku] = False
             c.stockout_cells += len(first_out)
 
-            click_rows.append(self._clickstream(si, day, item_df, first_out, orders, rng))
+            click_rows.append(self._clickstream(si, day, item_df, first_out, orders, click_rng))
 
         # --- 6. emit the day -------------------------------------------------
         self._write("pos_orders", day, _concat(order_frames))
@@ -538,14 +570,14 @@ class SimulationRun:
             min_dte=self.ledger.min_dte_matrix(ord_),
             store_open=store_open,
             catalog=self.catalog,
-            rng=rng,
+            rng=policy_rng,
         )
         req = self.policy.replenish(ctx_after)
         if len(req):
             keep = self.assortment[req.store_idx, req.sku_idx]
             req = type(req)(req.store_idx[keep], req.sku_idx[keep], req.qty[keep])
         if len(req):
-            pos = self.supply.place_orders(req.store_idx, req.sku_idx, req.qty, day, rng)
+            pos = self.supply.place_orders(req.store_idx, req.sku_idx, req.qty, day, supply_rng)
             np.add.at(self.on_order, (req.store_idx, req.sku_idx), req.qty)
             for arrival, group in pos.groupby("received_date"):
                 self._pending[arrival].append(group)
@@ -635,7 +667,7 @@ class SimulationRun:
             self.summary.append({"date": day, **counters.__dict__})
 
             if day.month != month:
-                self.customers.step_month(day, self.rng)
+                self.customers.step_month(day, self._substream(day.toordinal(), self.CHURN))
                 self._write("customer_snapshot", day, self.customers.to_bronze())
                 month = day.month
 
