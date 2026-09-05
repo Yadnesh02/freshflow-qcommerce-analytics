@@ -1,0 +1,113 @@
+name: ablation
+
+# Which of Policy B's four decisions is responsible (task S5.4).
+#
+# The experiment says Policy B raises margin about 6% and writes off roughly
+# twice the value of the baseline. Neither figure says which decision does it,
+# and the four pull in different directions: the newsvendor decides how much
+# stock exists, markdown and the deal rail decide how it clears, transfers
+# decide where it sits. After the disposal-cost sweep came back negative, this
+# is the tool left for attributing the waste accumulation.
+#
+# Each run is the S5.2 holdout - same 180 days, same 45-day pre-period, same
+# treatment split from the same generator - with the treated stores running
+# Policy B minus one decision, which the baseline makes instead. Substitution
+# rather than deletion: a policy without replenishment is not a policy without a
+# newsvendor, it is a store that never orders.
+#
+# `full` is one of the settings on purpose. It reproduces the unablated holdout
+# and is the total the four components have to add up to; without it the parts
+# have nothing to be compared against.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ablation
+  cancel-in-progress: false
+
+jobs:
+  components:
+    name: ${{ matrix.component }} · seed ${{ matrix.seed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        seed: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        component: [full, replenish, markdown, deal_slots, transfers]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: One ablated world
+        run: >
+          uv run python -m simulator.ablation
+          --seed ${{ matrix.seed }}
+          --component ${{ matrix.component }}
+          --out data/ablation
+
+      - name: Upload this component
+        uses: actions/upload-artifact@v4
+        with:
+          name: ablation-${{ matrix.component }}-${{ matrix.seed }}
+          path: data/ablation/*.parquet
+          retention-days: 30
+          if-no-files-found: error
+
+  attribute:
+    name: attribution
+    needs: components
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Download every component
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ablation-*
+          path: data/ablation
+          merge-multiple: true
+
+      # Reports the residual between the sum of the parts and the total, which
+      # is S5.4's gate. It does not fail the build on a large residual: whether
+      # the components are separable is the finding, not a build error.
+      - name: Attribute the effect
+        run: uv run python tasks.py attribution
+
+      - name: Upload the combined ablation
+        uses: actions/upload-artifact@v4
+        with:
+          name: ablation-panel
+          path: data/ablation/*.parquet
+          retention-days: 90
+          if-no-files-found: error

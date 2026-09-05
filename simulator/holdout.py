@@ -48,8 +48,22 @@ DEFAULT_PRE_DAYS = 45
 OUT_DIR = ROOT / "data" / "holdout"
 
 
-def run_seed(seed: int, days: int = DEFAULT_DAYS, pre_days: int = DEFAULT_PRE_DAYS) -> pd.DataFrame:
-    """One holdout world. Returns per-store, per-day outcomes."""
+def run_seed(
+    seed: int,
+    days: int = DEFAULT_DAYS,
+    pre_days: int = DEFAULT_PRE_DAYS,
+    treated_policy=None,
+) -> pd.DataFrame:
+    """One holdout world. Returns per-store, per-day outcomes.
+
+    `treated_policy` is a callable taking the catalogue and returning whatever
+    the treated stores should run - Policy B by default, and one of S5.4's
+    ablations otherwise. Passed in rather than branched on here so the holdout
+    construction has exactly one implementation: the switch date, the treatment
+    split and the per-store framing are the parts that must be identical across
+    every design that compares against this control, and a second copy of them
+    is a second thing to keep in step.
+    """
     cfg = load_sim_config()
     scratch = Path(tempfile.mkdtemp(prefix=f"ff-holdout-{seed}-"))
     try:
@@ -65,13 +79,17 @@ def run_seed(seed: int, days: int = DEFAULT_DAYS, pre_days: int = DEFAULT_PRE_DA
         treated = assign_treatment(probe.S, seed=seed)
         treated_ids = {probe.store_ids[i] for i in treated}
 
+        policy = HoldoutPolicy(cfg, probe.catalog, treated, switch_date)
+        if treated_policy is not None:
+            policy.optimized = treated_policy(probe.catalog)
+
         run = SimulationRun(
             cfg,
             seed=seed,
             days=days,
             out_dir=scratch,
             quiet=True,
-            policy=HoldoutPolicy(cfg, probe.catalog, treated, switch_date),
+            policy=policy,
         )
         run.run()
         frame = pd.DataFrame(run.store_summary)

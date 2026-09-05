@@ -211,6 +211,13 @@ def t_did(_: argparse.Namespace) -> int:
     return py("-m", "analytics.experiment.did")
 
 
+def t_attribution(_: argparse.Namespace) -> int:
+    """Attribute Policy B's effect to its four components."""
+    if not (ROOT / "analytics" / "experiment" / "attribution.py").exists():
+        return not_yet("attribution")
+    return py("-m", "analytics.experiment.attribution")
+
+
 def t_delivery_sweep(args: argparse.Namespace) -> int:
     """Contribution by discount-dependency band across delivery costs Rs 0-70."""
     return py("-m", "analytics.delivery_cost", "--warehouse", str(args.warehouse))
@@ -410,6 +417,7 @@ TARGETS = {
     "experiment": t_experiment,
     "did": t_did,
     "sensitivity": t_sensitivity,
+    "attribution": t_attribution,
     "delivery-sweep": t_delivery_sweep,
     "demo-slice": t_demo_slice,
     "publish-demo": t_publish_demo,
