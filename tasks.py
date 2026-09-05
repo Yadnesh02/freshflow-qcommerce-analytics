@@ -204,6 +204,11 @@ def t_anchors(args: argparse.Namespace) -> int:
     return py("-m", "analytics.anchors", "--warehouse", str(args.warehouse))
 
 
+def t_published(args: argparse.Namespace) -> int:
+    """Print every published figure the warehouse can answer for."""
+    return py("-m", "analytics.published", "--warehouse", str(args.warehouse))
+
+
 def t_expiry_risk(_: argparse.Namespace) -> int:
     """Score every open batch for expiry risk and value at risk."""
     return py("-m", "analytics.expiry_risk")
@@ -373,6 +378,7 @@ TARGETS = {
     "backtest": t_backtest,
     "forecast": t_forecast,
     "anchors": t_anchors,
+    "published": t_published,
     "expiry-risk": t_expiry_risk,
     "elasticity": t_elasticity,
     "markdown": t_markdown,
@@ -424,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
-        if name == "anchors":
+        if name in ("anchors", "published"):
             p.add_argument(
                 "--warehouse",
                 type=Path,

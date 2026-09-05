@@ -152,6 +152,17 @@ jobs:
       - name: Anchors
         run: uv run python tasks.py anchors
 
+      # A report, not a gate - it cannot fail, and it runs after the anchors so
+      # a build that disagrees with them still prints the figures somebody has
+      # to go and correct. This is the list a documentation pass works from:
+      # every quoted number the warehouse can answer for, each with the file
+      # that carries the old one. Without it, re-deriving after a change like
+      # 04737af means grepping a dozen files for digits and re-running analyses
+      # one at a time, which is expensive enough to get deferred - and once
+      # deferred, nobody can tell which figures were checked.
+      - name: Published figures
+        run: uv run python tasks.py published
+
       # The Python contract tests that need a warehouse - the staging contract
       # asserts each injected defect was repaired by the amount dirt.json says
       # was injected, which dbt's own tests cannot check because they only see
