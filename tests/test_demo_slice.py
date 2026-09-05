@@ -26,7 +26,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from analytics.demo_slice import EXCLUDED, PRUNED, SIZE_LIMIT_MB
+from analytics.demo_slice import CLUSTER_BY, EXCLUDED, PRUNED, SIZE_LIMIT_MB
 
 ROOT = Path(__file__).resolve().parent.parent
 DEMO = ROOT / "serving" / "demo" / "freshflow_demo.duckdb"
@@ -286,3 +286,74 @@ def test_the_slice_carries_no_orphan_foreign_keys(demo, scope) -> None:
         """,
     )
     assert orphan_days == 0, f"{orphan_days:,} rows reference a day not in dim_date"
+
+
+def test_every_large_table_is_clustered_on_write(demo) -> None:
+    """A table big enough to matter must declare sort keys, or its size is a coin toss.
+
+    Without an explicit `order by`, a table inherits whatever physical row
+    order the source warehouse happens to hold - and that order is not stable
+    across machines, because dbt builds the warehouse with
+    `preserve_insertion_order: false` on three threads. DuckDB picks a
+    compression scheme per row group from the data in front of it, so an
+    interleaved table compresses far worse than a sorted one.
+
+    The same commit produced 73.3 MB on the development laptop and 90.3 MB on a
+    clean CI runner, one side of the 80 MB ceiling each. This test exists so
+    the next large table added to the plan cannot quietly reintroduce that.
+    """
+    rows = dict(
+        demo.execute(
+            "select table_name, estimated_size from duckdb_tables() where schema_name = 'marts'"
+        ).fetchall()
+    )
+    unclustered = sorted(t for t, n in rows.items() if n and n >= 100_000 and t not in CLUSTER_BY)
+    assert not unclustered, (
+        f"tables over 100k rows with no CLUSTER_BY entry: {unclustered}. "
+        "Their size on disk depends on which machine built them."
+    )
+
+
+def test_every_cluster_key_is_a_real_column(demo) -> None:
+    """Sort keys are written by hand against the source schema, so check them.
+
+    A key that no longer exists raises a binder error at build time rather than
+    producing a wrong slice, so this is not about correctness of the data - it
+    is about failing in a test run rather than eight minutes into CI, after the
+    warehouse has already been rebuilt from scratch.
+    """
+    for table, keys in CLUSTER_BY.items():
+        present = {
+            r[0]
+            for r in demo.execute(
+                "select column_name from information_schema.columns "
+                "where table_schema = 'marts' and table_name = ?",
+                [table],
+            ).fetchall()
+        }
+        if not present:
+            continue  # table not in this slice; other tests own that
+        missing = [k for k in keys if k not in present]
+        assert not missing, f"{table} is clustered on columns it does not have: {missing}"
+
+
+def test_the_slice_has_headroom_rather_than_just_fitting(demo) -> None:
+    """Under the limit is not the same as reliably under it.
+
+    The ceiling is a hard failure in `warehouse.yml`, and the build that
+    produces the deployed artefact is the one that has to clear it. Sitting a
+    few hundred KB under 80 MB would pass here and fail there for reasons
+    nobody controls - a row group boundary landing differently is enough.
+
+    5% rather than something tighter, deliberately. The slice has grown every
+    sprint (68.3 -> 74.9 -> 73.3 -> 70.0 MB) and Sprint 5 adds
+    `mart_experiment_readout`, so this needs to fire while there is still room
+    to act - but a threshold close to the current size would fail on ordinary
+    growth rather than on a real problem, and a test that cries wolf gets
+    muted, which is worse than not having it.
+    """
+    mb = DEMO.stat().st_size / 1_048_576
+    assert mb < SIZE_LIMIT_MB * 0.95, (
+        f"slice is {mb:.1f} MB, inside 5% of the {SIZE_LIMIT_MB} MB ceiling. "
+        "Prune a column or drop a table before it fails on a machine you do not own."
+    )

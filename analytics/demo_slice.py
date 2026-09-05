@@ -61,6 +61,43 @@ STORE_COUNT = 5
 WINDOW_DAYS = 90
 SIZE_LIMIT_MB = 80
 
+# Sort keys applied on write, low cardinality first.
+#
+# **This is a correctness fix, not an optimisation.** Without it the slice
+# inherits whatever physical row order the source warehouse happens to hold,
+# and that order is not stable across machines: dbt builds the warehouse with
+# `preserve_insertion_order: false` on three threads, so which thread finishes
+# which chunk decides the layout. DuckDB then chooses a compression scheme per
+# row group from the data it sees, and RLE and dictionary encoding are worth
+# far more on sorted columns than on interleaved ones. The size of the file is
+# therefore a property of the machine that built it.
+#
+# That is not a theory. The same commit produced **73.3 MB on the development
+# laptop and 90.3 MB on a clean CI runner** - identical row counts bar nine,
+# the same DuckDB 1.5.5, and one over the 80 MB ceiling while the other sat 7
+# MB under it. Measured directly on the two largest tables, ordering is worth
+# **20.1%** (92.3 MB -> 73.8 MB).
+#
+# So the ceiling was never really being tested. A limit that passes or fails on
+# thread scheduling is a coin toss with a number written on it, and it landed
+# heads every time the check ran on one laptop.
+#
+# Keys are the ones a reader filters by, which is also what compresses: a
+# store's rows land together, then a SKU's, then time runs in order within
+# them. Tables absent here are small enough that ordering changes nothing.
+CLUSTER_BY = {
+    "fct_availability_hour": ("store_id", "sku_id", "date_day", "valid_to_hour_ts_ist"),
+    "agg_store_sku_day": ("store_id", "sku_id", "date_day"),
+    "fct_order_item": ("store_id", "date_day", "sku_id", "order_id"),
+    "fct_inventory_batch": ("store_id", "sku_id", "expiry_date", "batch_id"),
+    "fct_order": ("store_id", "date_day", "order_id"),
+    "mart_expiry_risk": ("store_id", "sku_id", "expiry_date"),
+    "mart_customer_360": ("store_id", "customer_id"),
+    "dim_customer": ("customer_id",),
+    "rec_purchase_order": ("store_id", "sku_id", "date_day"),
+    "fct_price_history": ("store_id", "sku_id", "effective_from_date"),
+}
+
 # Columns dropped from the slice. Every one is build-time machinery, not
 # something the app reads: surrogate keys exist so an incremental can merge and
 # a test can assert uniqueness, and the arrival columns exist so the 48h
@@ -256,6 +293,8 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         if table in PRUNED:
             columns = ", ".join(PRUNED[table])
             query = query.replace("select *", f"select * exclude ({columns})", 1)
+        if table in CLUSTER_BY:
+            query += " order by " + ", ".join(CLUSTER_BY[table])
         con.execute(f"create table marts.{table} as {query}")
         counts[table] = con.execute(f"select count(*) from marts.{table}").fetchone()[0]
 
