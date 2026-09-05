@@ -211,6 +211,13 @@ def t_did(_: argparse.Namespace) -> int:
     return py("-m", "analytics.experiment.did")
 
 
+def t_sensitivity(_: argparse.Namespace) -> int:
+    """Which findings survive the parameter sweep."""
+    if not (ROOT / "analytics" / "experiment" / "sensitivity.py").exists():
+        return not_yet("sensitivity")
+    return py("-m", "analytics.experiment.sensitivity")
+
+
 def t_published(args: argparse.Namespace) -> int:
     """Print every published figure the warehouse can answer for."""
     return py("-m", "analytics.published", "--warehouse", str(args.warehouse))
@@ -397,6 +404,7 @@ TARGETS = {
     "recommend": t_recommend,
     "experiment": t_experiment,
     "did": t_did,
+    "sensitivity": t_sensitivity,
     "demo-slice": t_demo_slice,
     "publish-demo": t_publish_demo,
     "api": t_api,

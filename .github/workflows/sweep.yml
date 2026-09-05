@@ -1,0 +1,139 @@
+name: sweep
+
+# Sensitivity analysis: which findings survive a wrong belief (task S5.3).
+#
+# Every setting is a fresh 180-day holdout in which Policy B has been given one
+# incorrect parameter and the control group has not. What is perturbed is the
+# *bundle* - what the policy believes - never the simulator's configuration. The
+# distinction matters: a sensitivity analysis asks what a wrong belief costs,
+# not what a different world looks like, and moving both would confound them.
+#
+# **The question it exists to answer.** The 180-day holdout found Policy B
+# expiring 76% more units than the baseline by its final month and writing off
+# 314% more value, in all thirty seeds, with the cost per expired unit doubling.
+# The suspected cause is that at a zero disposal cost Policy B's markdown rule
+# correctly declines to cut anywhere, so it has no price mechanism for clearing
+# expensive at-risk stock and that is what accumulates and dies. If that is
+# right, the accumulation shrinks as disposal cost rises. If it does not, the
+# cause is elsewhere and the sensitivity table has to say so.
+#
+# **Rs 0 is one of the settings on purpose.** It reproduces the unperturbed
+# holdout, so it is both a free control and a check that the perturbation
+# machinery changes nothing when it is asked to change nothing.
+#
+# Ten seeds rather than thirty. A sweep needs the direction and rough size of
+# each response across eight settings, not a tight interval on any one of them -
+# holdout.yml's thirty seeds are for that. Eighty runs here against thirty
+# there: broader, and no more expensive on a public repository.
+#
+# The settings are paired strings rather than a cross product of parameters and
+# values, because each parameter has its own scale - "elasticity_scale 50" is
+# not a thing, and a cross product would silently run it.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sweep
+  cancel-in-progress: false
+
+jobs:
+  settings:
+    name: ${{ matrix.setting }} · seed ${{ matrix.seed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        seed: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        setting:
+          # the hypothesis under test - does the waste accumulation resolve?
+          - disposal_cost:0
+          - disposal_cost:10
+          - disposal_cost:25
+          - disposal_cost:50
+          # the plan's elasticity +/-30%
+          - elasticity_scale:0.7
+          - elasticity_scale:1.3
+          # forecast error: a wider believed demand distribution
+          - dispersion_scale:1.5
+          # supply naivety in the other direction - the baseline assumes 2.5
+          # days for everything and Policy B's whole lead-time advantage is
+          # believing the per-category p90. What if that belief is 30% wrong?
+          - lead_time_scale:1.3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: One perturbed world
+        run: |
+          set -euo pipefail
+          PARAM="${SETTING%%:*}"
+          VALUE="${SETTING##*:}"
+          uv run python -m simulator.sweep \
+            --seed "$SEED" --param "$PARAM" --value "$VALUE" --out data/sweep
+        env:
+          SETTING: ${{ matrix.setting }}
+          SEED: ${{ matrix.seed }}
+
+      - name: Upload this setting
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-${{ matrix.setting }}-${{ matrix.seed }}
+          path: data/sweep/*.parquet
+          retention-days: 30
+          if-no-files-found: error
+
+  table:
+    name: sensitivity table
+    needs: settings
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Download every setting
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sweep-*
+          path: data/sweep
+          merge-multiple: true
+
+      - name: Which findings survive
+        run: uv run python tasks.py sensitivity
+
+      - name: Upload the combined sweep
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-panel
+          path: data/sweep/*.parquet
+          retention-days: 90
+          if-no-files-found: error
