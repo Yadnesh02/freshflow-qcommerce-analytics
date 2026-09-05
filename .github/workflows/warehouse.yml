@@ -1,0 +1,192 @@
+name: warehouse
+
+# The full-year build, on hardware that can be trusted (task S5.0).
+#
+# **Why this workflow exists.** On 2026-09-05 `mdsched` confirmed the
+# development laptop has faulty non-ECC RAM - events 1102 and 1202. The failure
+# that matters was never a crash: one row of `agg_store_sku_day` carried store
+# `FF-LPA-00`, a store that does not exist, produced by a single `0x31 -> 0x30`
+# bit flip between reading the parquet and writing the table. Row count
+# unchanged. Net revenue unchanged. Every total still tied. It was caught by one
+# foreign-key test and nothing else.
+#
+# So the rule for Sprint 5 onward is that any number reaching the README, the
+# app or a resume was produced by a workflow file, and this is that file for
+# everything derived from the warehouse. Read it as a strengthening of gate G5
+# rather than a workaround for broken hardware: a build that runs here, from a
+# seed, against the committed lockfile, is one anyone can reproduce from a
+# clone. A build that ran on somebody's laptop is a number asking to be trusted.
+#
+# **Deliberately `workflow_dispatch` only.** It runs ~40 minutes and replaces
+# artefacts the live app serves. That should be a decision, not something that
+# happens on every push - `ci.yml` already guards correctness on a 30-day slice
+# on every commit, which is the fast feedback this is not trying to be.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Replace the live demo slice with this build"
+        type: boolean
+        default: false
+
+# Publishing needs to write a Release asset and push the manifest that pins it.
+# Read-only otherwise; the token is only exposed to the two steps that need it.
+permissions:
+  contents: write
+
+# Never two of these at once. Not cancel-in-progress: a half-finished publish
+# leaves the Release and the manifest disagreeing, which is the exact state that
+# breaks the deployed app.
+concurrency:
+  group: warehouse
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build · verify · slice
+    runs-on: ubuntu-latest
+    # The 20 minutes ci.yml and docs.yml carry is right for a 30-day slice and
+    # far too short here: 365 days of simulation plus a full refresh of several
+    # multi-million-row window models is ~40 minutes on a 4-core runner.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      # --all-extras --dev, not requirements.txt. That file is the deployed
+      # app's eight runtime packages and deliberately excludes dbt, LightGBM,
+      # scipy, statsmodels and PuLP, which are all build-time. Same mistake the
+      # stock devcontainer made.
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Create local directories
+        run: uv run python tasks.py setup
+
+      # Deterministic from the seed. This is the claim gate G5 rests on, so it
+      # is worth stating plainly: nothing below reads anything that was not
+      # produced by this step, in this job, on this runner.
+      #
+      # Days and seed are hardcoded rather than dispatch inputs, on purpose.
+      # The anchors describe one dataset - 365 days at seed 42 - so a run at any
+      # other shape fails all seven by construction and teaches whoever sees it
+      # that a red anchor step is normal. That is worth more than the
+      # flexibility, and a different dataset is a different workflow. Keeping
+      # them literal also keeps tests/test_task_runner.py able to parse this
+      # line against the real argparse definition, which a `${{ }}` expression
+      # defeats.
+      - name: Generate the full-year dataset
+        run: uv run python tasks.py simulate --days 365 --seed 42
+
+      # `dbt build` is run *and* test - all 359 of them, including the
+      # foreign-key test that caught FF-LPA-00. If the hardware that produced
+      # the committed figures had damaged something structural, this step is
+      # where it surfaces, and it surfaces before the anchors are consulted.
+      - name: Build the warehouse
+        run: uv run python tasks.py build --full-refresh
+
+      # The five Sprint 4 engines. Ordered by dependency: expiry risk scores the
+      # batches everything else reasons about, and elasticity is fitted before
+      # the markdown optimiser can read a coefficient.
+      - name: Score expiry risk
+        run: uv run python tasks.py expiry-risk
+
+      - name: Fit price elasticity
+        run: uv run python tasks.py elasticity
+
+      - name: Markdown optimiser
+        run: uv run python tasks.py markdown
+
+      - name: Deal-slot allocator
+        run: uv run python tasks.py deal-slots
+
+      - name: Transfer optimiser
+        run: uv run python tasks.py transfers
+
+      - name: Newsvendor replenishment
+        run: uv run python tasks.py newsvendor
+
+      # Policy B reads this bundle rather than the rec_* tables (S4.6), and it
+      # is committed - which is what lets an experiment job run with no
+      # warehouse at all. Regenerated here so the committed copy cannot drift
+      # from the parameters this build actually fitted.
+      - name: Export the policy bundle
+        run: uv run python tasks.py policy-bundle
+
+      # ---------------------------------------------------------------- gate
+      # The acceptance gate for S5.0. Seven figures measured on the laptop
+      # build; if a clean runner disagrees with any of them, the laptop's build
+      # was the wrong one and the documents get corrected - never the anchors.
+      #
+      # A pass here means "the build reproduced", NOT "the data is clean". The
+      # dbt step above is the integrity check; assuming otherwise is precisely
+      # the inference that let the phantom store survive a session.
+      - name: Anchors
+        run: uv run python tasks.py anchors
+
+      # The Python contract tests that need a warehouse - the staging contract
+      # asserts each injected defect was repaired by the amount dirt.json says
+      # was injected, which dbt's own tests cannot check because they only see
+      # the output.
+      - name: Warehouse contract tests
+        run: uv run pytest -m needs_warehouse
+
+      - name: Build the demo slice
+        run: uv run python tasks.py demo-slice
+
+      # Always, so a failed run is still inspectable. The policy bundle is here
+      # because a change in it is a change in what Policy B does, and that is
+      # worth diffing against the committed copy before trusting a result.
+      - name: Upload build outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warehouse-build
+          path: |
+            serving/demo/freshflow_demo.duckdb
+            simulator/config/policy_bundle.json
+            data/_manifest/dirt.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      # ------------------------------------------------------------- publish
+      # Only when explicitly asked for, and the two halves move together on
+      # purpose. Replacing the Release asset without pushing the manifest that
+      # pins its sha256 leaves the deployed container pointed at a file whose
+      # hash does not match what it was deployed with, and serving/demo_data.py
+      # raises on exactly that - the app survives only while its local cache is
+      # warm and fails on the next restart. Splitting these into two steps a
+      # human does by hand is how that happened on 2026-09-05.
+      - name: Publish the demo slice
+        if: inputs.publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run python tasks.py publish-demo
+
+      - name: Commit the manifest that pins it
+        if: inputs.publish
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- serving/demo/manifest.json; then
+            echo "manifest unchanged - nothing to commit"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add serving/demo/manifest.json
+          git commit -m "chore(serving): republish the demo slice from run ${GITHUB_RUN_ID}
+
+          Built by .github/workflows/warehouse.yml on a clean runner, 365 days
+          at seed 42, with all seven anchors holding and the dbt suite green.
+
+          Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+          git push origin HEAD:${GITHUB_REF_NAME}

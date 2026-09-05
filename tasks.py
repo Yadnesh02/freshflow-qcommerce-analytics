@@ -199,6 +199,11 @@ def t_backtest(_: argparse.Namespace) -> int:
     return py("-m", "analytics.forecasting.backtest")
 
 
+def t_anchors(args: argparse.Namespace) -> int:
+    """Assert the warehouse rebuilt to the seven figures the documents quote."""
+    return py("-m", "analytics.anchors", "--warehouse", str(args.warehouse))
+
+
 def t_expiry_risk(_: argparse.Namespace) -> int:
     """Score every open batch for expiry risk and value at risk."""
     return py("-m", "analytics.expiry_risk")
@@ -367,6 +372,7 @@ TARGETS = {
     "lint": t_lint,
     "backtest": t_backtest,
     "forecast": t_forecast,
+    "anchors": t_anchors,
     "expiry-risk": t_expiry_risk,
     "elasticity": t_elasticity,
     "markdown": t_markdown,
@@ -418,6 +424,13 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
+        if name == "anchors":
+            p.add_argument(
+                "--warehouse",
+                type=Path,
+                default=WAREHOUSE,
+                help="warehouse to check (default: the full-year dev build)",
+            )
         if name == "actions":
             p.add_argument("--policy", default="both", choices=["baseline", "optimized", "both"])
             p.add_argument("--days", type=int, default=75, help="warm-up days before the readout")
