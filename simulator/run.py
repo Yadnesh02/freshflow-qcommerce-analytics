@@ -46,7 +46,7 @@ from simulator.fefo import (
     InventoryLedger,
     to_movement_frame,
 )
-from simulator.policies.base import PolicyContext
+from simulator.policies.base import Policy, PolicyContext
 from simulator.policies.baseline import BaselinePolicy
 from simulator.policies.optimized import OptimizedPolicy
 from simulator.supply import SupplyChain
@@ -109,6 +109,12 @@ class SimulationRun:
     out_dir: Path = RAW_DIR
     policy_name: str = "baseline"
     quiet: bool = False
+    # An already-constructed policy, used instead of building one by name.
+    # S5.2's HoldoutPolicy needs a treatment assignment and a switch date, which
+    # a name cannot carry, and widening build_policy to take arbitrary keyword
+    # arguments would push that knowledge into every caller that only ever wants
+    # one of the two arms.
+    policy: Policy | None = None
 
     summary: list[dict] = field(default_factory=list)
     store_summary: list[dict] = field(default_factory=list)
@@ -124,7 +130,8 @@ class SimulationRun:
         self.baskets = BasketAssembler(self.cfg, self.catalog, self.customers)
         self.supply = SupplyChain(self.cfg, self.catalog, seed=self.seed)
         self.fulfiller = Fulfiller(self.cfg, self.catalog)
-        self.policy = build_policy(self.policy_name, self.cfg, self.catalog)
+        if self.policy is None:
+            self.policy = build_policy(self.policy_name, self.cfg, self.catalog)
 
         self.S, self.K = len(self.cfg.stores), len(self.catalog)
         self.ledger = InventoryLedger(self.S, self.K)
@@ -138,7 +145,13 @@ class SimulationRun:
         self.open_ord = np.array([s["opened_date"].toordinal() for s in self.cfg.stores])
 
         # rolling state the policy reads
-        window = self.cfg.policies[self.policy_name]["replenishment"]["trailing_window_days"]
+        # The trailing-sales window is shared state across the whole estate, so a
+        # holdout run cannot have one per arm. It takes the baseline's, which is
+        # the control's and is also what every store used through the
+        # pre-period - so the window does not change on the switch date and
+        # cannot be mistaken for the treatment effect.
+        window_arm = self.policy_name if self.policy_name in self.cfg.policies else "baseline"
+        window = self.cfg.policies[window_arm]["replenishment"]["trailing_window_days"]
         self._window = window
         self._sales_history = np.zeros((window, self.S, self.K))
         # which cells were actually available to sell on each of those days
