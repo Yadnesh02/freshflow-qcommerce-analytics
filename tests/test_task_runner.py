@@ -105,3 +105,56 @@ def test_local_sql_lint_covers_everything_ci_lints() -> None:
         f"CI lints {sorted(ci_paths)} but tasks.py lint does not cover {sorted(missing)} - "
         "local runs will pass on files CI rejects"
     )
+
+
+# ==================================================== artifact names
+# GitHub rejects these in an artifact name. The list is short and the failure is
+# late: the job runs to completion first and is refused only at upload.
+INVALID_IN_ARTIFACT_NAME = set('":<>|*?\r\n\/')
+
+
+def _matrix_values(job: dict) -> dict[str, list[str]]:
+    matrix = job.get("strategy", {}).get("matrix", {})
+    return {
+        key: [str(v) for v in values]
+        for key, values in matrix.items()
+        if isinstance(values, list) and key not in ("include", "exclude")
+    }
+
+
+def _expanded_names(job: dict) -> list[str]:
+    """Every artifact name this job could upload, with matrix values filled in."""
+    values = _matrix_values(job)
+    names: list[str] = []
+    for step in job.get("steps", []):
+        if "upload-artifact" not in str(step.get("uses", "")):
+            continue
+        template = str(step.get("with", {}).get("name", ""))
+        if not template:
+            continue
+        candidates = [template]
+        for key, options in values.items():
+            token = re.compile(r"\$\{\{\s*matrix\." + re.escape(key) + r"\s*\}\}")
+            candidates = [token.sub(option, c) for c in candidates for option in options]
+        names.extend(candidates)
+    return names
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=[p.name for p in WORKFLOWS])
+def test_no_workflow_can_build_an_invalid_artifact_name(path: Path) -> None:
+    """Matrix values reach artifact names, and some characters are refused there.
+
+    sweep.yml's settings were written `disposal_cost:0` so the job labels read
+    well, and the same string was interpolated into the artifact name. All
+    eighty jobs simulated for sixteen minutes and were then rejected at upload,
+    because a colon is not allowed - and GitHub expressions have no `replace()`
+    to sanitise it after the fact, so the separator itself had to change.
+
+    Checked by expanding the matrix rather than by eyeballing the template: the
+    template contains no invalid character, only the values it interpolates do.
+    """
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for job_name, job in (workflow.get("jobs") or {}).items():
+        for name in _expanded_names(job):
+            bad = sorted(INVALID_IN_ARTIFACT_NAME & set(name))
+            assert not bad, f"{path.name}:{job_name} can upload {name!r}, invalid: {bad}"

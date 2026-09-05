@@ -52,19 +52,19 @@ jobs:
         seed: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         setting:
           # the hypothesis under test - does the waste accumulation resolve?
-          - disposal_cost:0
-          - disposal_cost:10
-          - disposal_cost:25
-          - disposal_cost:50
+          - disposal_cost-0
+          - disposal_cost-10
+          - disposal_cost-25
+          - disposal_cost-50
           # the plan's elasticity +/-30%
-          - elasticity_scale:0.7
-          - elasticity_scale:1.3
+          - elasticity_scale-0.7
+          - elasticity_scale-1.3
           # forecast error: a wider believed demand distribution
-          - dispersion_scale:1.5
+          - dispersion_scale-1.5
           # supply naivety in the other direction - the baseline assumes 2.5
           # days for everything and Policy B's whole lead-time advantage is
           # believing the per-category p90. What if that belief is 30% wrong?
-          - lead_time_scale:1.3
+          - lead_time_scale-1.3
 
     steps:
       - uses: actions/checkout@v4
@@ -83,8 +83,14 @@ jobs:
       - name: One perturbed world
         run: |
           set -euo pipefail
-          PARAM="${SETTING%%:*}"
-          VALUE="${SETTING##*:}"
+          # Split on the LAST hyphen: parameter names carry underscores, never
+          # hyphens, so "elasticity_scale-0.7" divides unambiguously. The
+          # separator was a colon until run #1, where all eighty jobs simulated
+          # for sixteen minutes and were then refused at upload - an artifact
+          # name may not contain one, and GitHub expressions have no replace()
+          # to sanitise it after the fact.
+          PARAM="${SETTING%-*}"
+          VALUE="${SETTING##*-}"
           uv run python -m simulator.sweep \
             --seed "$SEED" --param "$PARAM" --value "$VALUE" --out data/sweep
         env:
