@@ -204,6 +204,13 @@ def t_anchors(args: argparse.Namespace) -> int:
     return py("-m", "analytics.anchors", "--warehouse", str(args.warehouse))
 
 
+def t_did(_: argparse.Namespace) -> int:
+    """Difference-in-differences over the store-level holdout runs."""
+    if not (ROOT / "analytics" / "experiment" / "did.py").exists():
+        return not_yet("did")
+    return py("-m", "analytics.experiment.did")
+
+
 def t_published(args: argparse.Namespace) -> int:
     """Print every published figure the warehouse can answer for."""
     return py("-m", "analytics.published", "--warehouse", str(args.warehouse))
@@ -389,6 +396,7 @@ TARGETS = {
     "actions": t_actions,
     "recommend": t_recommend,
     "experiment": t_experiment,
+    "did": t_did,
     "demo-slice": t_demo_slice,
     "publish-demo": t_publish_demo,
     "api": t_api,
