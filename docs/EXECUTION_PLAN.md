@@ -216,7 +216,17 @@ So Sprint 5 splits its compute three ways:
 |---|---|---|
 | **GitHub Actions** — the authoritative one | Every figure that reaches the README, the app or the résumé. Built from a seed, on a clean runner, against the pinned lockfile. | Free and unlimited — the repo is public |
 | **Codespaces** (4-core; the devcontainer is already fit for it) | Interactive iteration, running the app, exploratory queries | 120 core-hours/month free, about 30h at 4-core |
-| **The laptop** | Editing, git, reading. **Not** producing figures. | — until the RAM is replaced and `mdsched` comes back clean |
+| **The laptop** | Editing, git, reading. **Not** producing figures. | Work-issued, so the hardware is not ours to repair — reported to IT. The split above *is* the mitigation, not a stopgap until a fix. |
+
+**The repair is not a prerequisite, and that is the point of the split.** The only serious risk
+the faulty RAM posed was silently altering a figure that ends up in the README or on a résumé,
+and that risk disappears once no figure is produced locally. What remains is small and named
+here so nobody has to re-derive it: source edited locally could in principle take a bit flip and
+be committed — but git SHA-hashes every object, so transport corruption is caught, and a flipped
+bit in Python overwhelmingly yields a syntax error or a failing test rather than a plausible
+wrong answer, which is what CI is for. The rest is lost time from crashes, answered by
+committing often. Working inside the Codespace removes even that, and is a preference rather
+than a requirement.
 
 **The rule for the rest of the project: if a number appears in the README, on the app, or on
 the résumé, a workflow file produced it.** Read that as a strengthening of G5 rather than a
