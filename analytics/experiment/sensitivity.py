@@ -109,7 +109,15 @@ def report(frame: pd.DataFrame) -> int:
         for metric in METRICS:
             estimates = [estimate(block[block["value"] == v], metric) for v in values]
             cells = "".join(f"{e.relative:>15.1f}%" for e in estimates)
-            verdict = "yes" if survives(estimates) else "\033[31mNO\033[0m"
+            # "not swept" is not "did not survive". A parameter given one value
+            # produces a table identical in shape to a swept one, and printing
+            # NO against it reads as a finding failing when nothing was varied.
+            # The first real run showed exactly that for dispersion_scale and
+            # lead_time_scale, both of which carry a single setting.
+            if len(values) < 2:
+                verdict = "not swept"
+            else:
+                verdict = "yes" if survives(estimates) else "\033[31mNO\033[0m"
             print(f"  {metric:<16}{cells}   {verdict}")
         print()
 

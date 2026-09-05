@@ -26,21 +26,32 @@ class FakeEstimate:
 
 
 def _run(param: str, value: float, seed: int, first: int, last: int) -> pd.DataFrame:
-    days = range(first, last + 1)
-    return pd.DataFrame(
-        {
-            "param": param,
-            "value": float(value),
-            "seed": seed,
-            "store_id": "S00",
-            "day_rel": list(days),
-            "post": [d >= 0 for d in days],
-            "revenue": 1.0,
-            "cogs": 0.5,
-            "units_expired": 1.0,
-            "treated": True,
-        }
-    )
+    """One synthetic setting. Both arms, because a 2x2 needs a control group."""
+    days = list(range(first, last + 1))
+    rows = []
+    for treated in (False, True):
+        for store in range(4):
+            for day in days:
+                post = day >= 0
+                # a small treatment effect so the estimator has something to find
+                expired = 10.0 - (2.0 if (post and treated) else 0.0)
+                rows.append(
+                    {
+                        "param": param,
+                        "value": float(value),
+                        "seed": seed,
+                        "store_id": f"{'T' if treated else 'C'}{store:02d}",
+                        "day_rel": day,
+                        "post": post,
+                        "treated": treated,
+                        "revenue": 100.0,
+                        "cogs": 50.0,
+                        "units_expired": expired,
+                        "units_lost": 5.0,
+                        "writeoff_value": expired * 4.0,
+                    }
+                )
+    return pd.DataFrame(rows)
 
 
 def test_runs_of_different_lengths_are_refused(tmp_path) -> None:
@@ -103,3 +114,30 @@ def test_a_single_setting_never_survives() -> None:
     at all.
     """
     assert not survives([FakeEstimate(-5.0, 1e-9)])
+
+
+def test_a_single_setting_reports_not_swept_rather_than_a_failure(tmp_path, capsys) -> None:
+    """One value is not evidence against a finding, and must not print as one.
+
+    A parameter given a single setting produces a table identical in shape to a
+    swept one. Printing NO against it says the conclusion failed, when in fact
+    nothing was varied - which is how a gap in the experiment gets filed as a
+    result. The first real sweep did this for dispersion_scale and
+    lead_time_scale, both of which carry one setting.
+    """
+    from analytics.experiment.sensitivity import report
+
+    frames = []
+    for value in (0.0, 25.0):
+        for seed in (1, 2, 3):
+            frames.append(_run("disposal_cost", value, seed, -5, 5))
+    for seed in (1, 2, 3):
+        frames.append(_run("lead_time_scale", 1.3, seed, -5, 5))
+    frame = pd.concat(frames, ignore_index=True)
+    frame["margin"] = frame["revenue"] - frame["cogs"]
+
+    report(frame)
+    out = capsys.readouterr().out
+    swept, single = out.split("--- lead_time_scale ---")
+    assert "not swept" not in swept, "a genuinely swept parameter was called not swept"
+    assert "not swept" in single, "a single-setting parameter was reported as a failed finding"
