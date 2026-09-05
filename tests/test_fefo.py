@@ -161,7 +161,7 @@ def test_expired_stock_is_written_off_exactly_once() -> None:
     led = ledger()
     receive_one(led, 0, 5, 30, expires_in=2)
     first = led.expire(TODAY + 3)
-    assert first == [(0, 30)]
+    assert first == [(0, 30, 0)]
     assert led.on_hand(0, 5) == 0
     assert led.expire(TODAY + 30) == [], "the same batch was written off twice"
 
@@ -171,14 +171,14 @@ def test_stock_is_not_written_off_before_it_expires() -> None:
     receive_one(led, 0, 5, 30, expires_in=5)
     assert led.expire(TODAY + 5) == []
     assert led.on_hand(0, 5) == 30
-    assert led.expire(TODAY + 6) == [(0, 30)]
+    assert led.expire(TODAY + 6) == [(0, 30, 0)]
 
 
 def test_expiry_only_writes_off_what_is_left_after_sales() -> None:
     led = ledger()
     receive_one(led, 0, 5, 30, expires_in=1)
     led.allocate(0, 5, 18, TODAY)
-    assert led.expire(TODAY + 2) == [(0, 12)]
+    assert led.expire(TODAY + 2) == [(0, 12, 0)]
 
 
 def test_write_offs_are_logged_as_movements() -> None:

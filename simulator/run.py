@@ -111,6 +111,7 @@ class SimulationRun:
     quiet: bool = False
 
     summary: list[dict] = field(default_factory=list)
+    store_summary: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         # Kept for anything outside the daily loop that still wants one stream.
@@ -363,10 +364,35 @@ class SimulationRun:
                 self._write("wms_inventory_batch", day, batches.drop(columns=["_sku_idx"]))
             self._write("wms_purchase_orders", day, pos.drop(columns=["_sku_idx", "_sup_idx"]))
 
+        # Per-store outcomes for the same day, kept alongside the estate totals.
+        # S5.2's difference-in-differences runs one world in which some stores
+        # are treated and the rest are a holdout, so it needs an outcome per
+        # store per day; `DayCounters` is estate-wide and cannot answer that.
+        # Accumulated here rather than aggregated later from the bronze feeds
+        # because the feeds are written per day and thrown away by the
+        # experiment harness, and re-reading them would make a 30-seed run an
+        # I/O problem it currently is not.
+        per_store = {
+            field: np.zeros(self.S, dtype=np.float64)
+            for field in (
+                "units_sold",
+                "units_lost",
+                "units_expired",
+                "writeoff_value",
+                "revenue",
+                "cogs",
+                "orders",
+                "stockout_cells",
+            )
+        }
+
         # --- 2. write off anything past its date ------------------------------
-        for batch_row, units in self.ledger.expire(ord_):
+        for batch_row, units, store in self.ledger.expire(ord_):
+            value = units * self.ledger.batch_cost(batch_row)
             c.units_expired += units
-            c.writeoff_value += units * self.ledger.batch_cost(batch_row)
+            c.writeoff_value += value
+            per_store["units_expired"][store] += units
+            per_store["writeoff_value"][store] += value
 
         # --- 3. today's prices, decided before customers see them -------------
         min_dte = self.ledger.min_dte_matrix(ord_)
@@ -452,6 +478,7 @@ class SimulationRun:
                     key = (si, int(sku_idx))
                     first_out.setdefault(key, hour_of[oid].hour)
                 c.units_lost += lost
+                per_store["units_lost"][si] += lost
 
                 for sold_sku, a in allocs:
                     if sold_sku != sku_idx:
@@ -476,6 +503,9 @@ class SimulationRun:
                     c.units_sold += a.qty
                     c.revenue += a.qty * unit_price
                     c.cogs += a.qty * cost
+                    per_store["units_sold"][si] += a.qty
+                    per_store["revenue"][si] += a.qty * unit_price
+                    per_store["cogs"][si] += a.qty * cost
                     if a.shelf_life_fraction < LOW_DTE_FRACTION:
                         self.customers.record("low_dte", np.array([cust]))
                     if _promo_id(discount[si, sold_sku], sold_sku in deals.get(si, [])):
@@ -529,6 +559,7 @@ class SimulationRun:
                 self.customers.record("late", late_rows)
             self.customers.record("order", orders["customer_row"].to_numpy())
             c.orders += len(orders)
+            per_store["orders"][si] += len(orders)
 
             out = orders.assign(
                 store_id=self.store_ids[si],
@@ -541,6 +572,7 @@ class SimulationRun:
                 stockout_rows.append((self.store_ids[si], self.sku_ids[sku], day, hour))
                 self._instock_history[slot, si, sku] = False
             c.stockout_cells += len(first_out)
+            per_store["stockout_cells"][si] += len(first_out)
 
             click_rows.append(self._clickstream(si, day, item_df, first_out, orders, click_rng))
 
@@ -583,6 +615,14 @@ class SimulationRun:
                 self._pending[arrival].append(group)
 
         self._history_day += 1
+        self.store_summary.extend(
+            {
+                "date": day,
+                "store_id": self.store_ids[si],
+                **{field: values[si] for field, values in per_store.items()},
+            }
+            for si in range(self.S)
+        )
         return c
 
     # ------------------------------------------------------------------ feeds

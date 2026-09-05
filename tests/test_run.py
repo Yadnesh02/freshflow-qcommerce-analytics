@@ -298,3 +298,46 @@ def test_a_different_seed_gives_a_different_world(tmp_path) -> None:
     a = SimulationRun(cfg, seed=42, days=3, out_dir=tmp_path / "a", quiet=True).run()
     c = SimulationRun(cfg, seed=7, days=3, out_dir=tmp_path / "c", quiet=True).run()
     assert not a["units_sold"].equals(c["units_sold"])
+
+
+def test_per_store_outcomes_sum_to_the_estate_totals() -> None:
+    """S5.2 needs an outcome per store per day, and it must be the same day.
+
+    `DayCounters` is estate-wide, so a difference-in-differences over a
+    store-level holdout cannot be computed from it. The per-store rows are
+    accumulated in the same pass rather than aggregated afterwards from the
+    bronze feeds - the experiment harness throws those away, and re-reading them
+    would turn a 30-seed run into an I/O problem it currently is not.
+
+    Two ways that could silently go wrong, and this catches both: a counter
+    incremented on the estate total but not per store, or one attributed to the
+    wrong store index. Expiry is the one worth watching - it happens outside the
+    per-store loop, and its store had to be threaded out of the FEFO ledger,
+    which is the only reason `InventoryLedger.expire` returns a triple.
+    """
+    import tempfile
+    from pathlib import Path
+
+    import pandas as pd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = SimulationRun(cfg, seed=7, days=4, out_dir=Path(tmp), quiet=True)
+        estate = run.run()
+        per_store = pd.DataFrame(run.store_summary)
+
+    assert len(per_store) == len(estate) * run.S, "expected one row per store per day"
+    assert per_store["store_id"].nunique() == run.S
+
+    for column in (
+        "units_sold",
+        "units_lost",
+        "units_expired",
+        "writeoff_value",
+        "revenue",
+        "cogs",
+        "orders",
+        "stockout_cells",
+    ):
+        assert per_store[column].sum() == pytest.approx(estate[column].sum(), abs=0.01), (
+            f"{column} does not reconcile: the per-store rows and the estate total disagree"
+        )

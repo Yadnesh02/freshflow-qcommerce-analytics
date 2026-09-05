@@ -161,9 +161,17 @@ class InventoryLedger:
             self._queues.pop((store_idx, sku_idx), None)
         return out, remaining
 
-    def expire(self, date_ord: int) -> list[tuple[int, int]]:
-        """Write off everything past its expiry date. Returns (batch_row, units)."""
-        written: list[tuple[int, int]] = []
+    def expire(self, date_ord: int) -> list[tuple[int, int, int]]:
+        """Write off everything past its expiry date.
+
+        Returns (batch_row, units, store_idx). The store is included because
+        S5.2's difference-in-differences needs write-offs attributed to a store,
+        and this loop already holds that - `cell` is (store_idx, sku_idx). Every
+        other counter in the day is accumulated inside the per-store loop in
+        `SimulationRun._step`; expiry happens before it, so without the store
+        here it is the one outcome that could only be reported estate-wide.
+        """
+        written: list[tuple[int, int, int]] = []
         empty_cells: list[tuple[int, int]] = []
 
         for cell, q in self._queues.items():
@@ -176,7 +184,7 @@ class InventoryLedger:
                     self.movements.append(
                         (EXPIRY_WRITEOFF, entry[2], -units, date_ord, self._move_seq)
                     )
-                    written.append((entry[2], units))
+                    written.append((entry[2], units, cell[0]))
             if not q:
                 empty_cells.append(cell)
 
