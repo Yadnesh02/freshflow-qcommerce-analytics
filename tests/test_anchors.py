@@ -28,6 +28,7 @@ from analytics.anchors import (
     ANCHORS,
     MONEY_TOLERANCE_INR,
     SHAPE_ANCHOR,
+    SHAPE_TOLERANCE,
     Anchor,
     Result,
     _matches,
@@ -205,3 +206,57 @@ def test_anchor_is_frozen() -> None:
     with pytest.raises(FrozenInstanceError):
         ANCHORS[0].expected = 1  # type: ignore[misc]
     assert isinstance(ANCHORS[0], Anchor)
+
+
+def test_a_small_shape_move_is_a_changed_stream_not_a_changed_dataset(capsys) -> None:
+    """Thirteen rows in 6.3 million is not "you built the wrong thing".
+
+    The first version of the report had no tolerance on the shape anchor, and it
+    misfired the first time it mattered: the substream refactor moved `agg_rows`
+    by 0.0002% and the output announced that every other anchor was meaningless -
+    at the exact moment those anchors were the values being adopted. A report
+    that cries wrong-dataset over a rounding error trains people to skip its
+    headline, which is the one line it needs them to read.
+    """
+    shape = next(a for a in ANCHORS if a.name == SHAPE_ANCHOR)
+    nudged = shape.expected + 13  # the real move, on the real anchor
+    results = [
+        Result(a, nudged if a.name == SHAPE_ANCHOR else a.expected, a.name != SHAPE_ANCHOR)
+        for a in ANCHORS
+    ]
+    assert report(results) is False, "a moved anchor must still fail"
+    out = capsys.readouterr().out
+    assert "not the build these figures describe" not in out
+    assert "the shape matches" in out.lower(), "the report should say the dataset is the right one"
+
+
+def test_a_different_dataset_still_says_so(capsys) -> None:
+    """The tolerance must not swallow the case it was written for.
+
+    CI's 30-day slice holds 495,162 rows against 6,324,308 - 92% below, four
+    orders of magnitude outside the tolerance. If widening the boundary ever
+    lets that read as "the same dataset with different draws", the report is
+    back to inviting someone to debug net revenue on a warehouse they never
+    meant to build.
+    """
+    results = [
+        Result(a, 495_162.0 if a.name == SHAPE_ANCHOR else a.expected, a.name != SHAPE_ANCHOR)
+        for a in ANCHORS
+    ]
+    assert report(results) is False
+    out = capsys.readouterr().out
+    assert "not the build these figures describe" in out
+
+
+def test_the_shape_tolerance_sits_between_the_two_cases() -> None:
+    """Stated as a relationship, so neither bound can be edited into the other.
+
+    Below it: a changed random stream, measured at 13 rows in 6,324,308. Above
+    it: a different dataset, measured at the 30-day slice's 495,162. The gap
+    between those is four orders of magnitude, so the boundary is not a tuned
+    number - but it is only defensible while it is provably inside that gap.
+    """
+    expected = next(a for a in ANCHORS if a.name == SHAPE_ANCHOR).expected
+    stream_change = 13 / expected
+    different_dataset = abs(495_162 - expected) / expected
+    assert stream_change < SHAPE_TOLERANCE < different_dataset
