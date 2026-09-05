@@ -304,9 +304,15 @@ class DirtInjector:
             frame = pd.read_parquet(path)
             if frame.empty:
                 continue
-            frame["sku_id"] = frame["sku_id"].str.replace(r"^SKU-0*(\d+)$", r"SKU_\1", regex=True)
+            migrated = frame["sku_id"].str.replace(r"^SKU-0*(\d+)$", r"SKU_\1", regex=True)
+            # Count the rows the regex actually rewrote, not every row in a
+            # post-migration partition. The two are equal only while every id
+            # matches the old format, which is a property of the catalogue
+            # rather than of this defect, and a count that quietly assumes it
+            # overstates the moment that stops being true.
+            total += int((migrated != frame["sku_id"]).sum())
+            frame["sku_id"] = migrated
             frame.to_parquet(path, index=False)
-            total += len(frame)
 
         self._record(
             key="sku_code_migration",
@@ -370,8 +376,30 @@ class DirtInjector:
         self.unit_drift()
         self.inconsistent_returns()
         self.timezone_mix()
-        self.sku_code_migration()
+        # The outage runs BEFORE the migration, and the order is load-bearing.
+        # It deletes two whole clickstream partitions; the migration rewrites
+        # ids in every partition on or after the migration date and records how
+        # many it touched. Run the other way round, the migration counts rows
+        # the outage then deletes, and dirt.json describes a file that never
+        # shipped - which is exactly what happened: it claimed 1,678,803
+        # migrated events where staging could find only 1,658,047, and
+        # test_the_conform_fires_on_exactly_the_migrated_events failed on a
+        # 20,756-row gap that was the manifest's error, not staging's.
+        #
+        # It held until now only because the outage lands on the busiest days
+        # and those happened to sit before the migration date. A different
+        # random stream moved them and the latent fault surfaced.
+        #
+        # Swapping them changes no delivered data. The outage ranks candidate
+        # days by row count, which the migration does not alter - it rewrites
+        # values, not rows - so the same two partitions are deleted either way
+        # and the surviving rows are migrated either way. Only the count is
+        # corrected.
+        #
+        # The general rule, worth applying to any defect added here: a defect
+        # that removes rows must run before any defect that counts them.
         self.clickstream_outage()
+        self.sku_code_migration()
 
         manifest = self.raw_dir.parent / "_manifest"
         manifest.mkdir(parents=True, exist_ok=True)

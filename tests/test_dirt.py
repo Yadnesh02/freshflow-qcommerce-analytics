@@ -331,3 +331,74 @@ def test_the_issues_document_generates_and_covers_every_defect(worlds, tmp_path)
     for d in defects.values():
         assert d.title in text
         assert d.fix[:40] in text
+
+
+def test_the_migration_count_describes_the_files_that_actually_shipped(worlds) -> None:
+    """A defect that removes rows must run before any defect that counts them.
+
+    `sku_code_migration` records how many clickstream events it rewrote, and
+    `clickstream_outage` deletes two whole partitions. Run the migration first
+    and its count includes rows the outage then removes, so `dirt.json`
+    describes a raw layer that never shipped - which is precisely what happened:
+    it claimed 1,678,803 migrated events where staging could find only
+    1,658,047, and `test_the_conform_fires_on_exactly_the_migrated_events`
+    failed on the difference. The manifest was wrong, not the staging model.
+
+    It survived for months because the outage lands on the busiest days and
+    those happened to fall before the migration date. Nothing enforced it; a
+    different random stream moved them and the fault surfaced. This test reads
+    the delivered files rather than trusting the number the pass wrote down
+    about itself.
+
+    **On its own it is not enough, and that is worth stating.** Checked against
+    the original ordering it still passes, because this fixture's short window
+    puts the outage nowhere near the migration date - the same coincidence that
+    hid the fault in the first place, reproduced in miniature. It catches a
+    count that is wrong for other reasons; the ordering is held by
+    `test_no_defect_counts_rows_a_later_defect_deletes`, which asserts the
+    structure instead of hoping the data exercises it.
+    """
+    _, dirty, defects = worlds
+    migrated_on_disk = 0
+    for path in sorted(dirty.glob("clickstream/**/*.parquet")):
+        frame = pd.read_parquet(path)
+        if not frame.empty:
+            migrated_on_disk += int(frame["sku_id"].str.match(r"^SKU_\d+$").sum())
+
+    assert migrated_on_disk == defects["sku_code_migration"].rows, (
+        f"dirt.json claims {defects['sku_code_migration'].rows:,} migrated events but the "
+        f"delivered files carry {migrated_on_disk:,} - a later defect removed rows an earlier "
+        "one had already counted"
+    )
+
+
+def test_no_defect_counts_rows_a_later_defect_deletes(worlds) -> None:
+    """The general form, stated so the next defect added here inherits it.
+
+    Only the outage removes rows today, so the rule reduces to "the outage runs
+    first". Written against the call order rather than against row counts
+    because that is the property worth protecting: a future defect that drops
+    rows will not announce itself by breaking one specific count, it will
+    quietly make some other defect's number an overstatement.
+    """
+    import inspect
+
+    from simulator.dirt import DirtInjector as Injector
+
+    source = inspect.getsource(Injector.apply)
+    # removeprefix/removesuffix, not strip: `"self.sku_code_migration".lstrip("self.")`
+    # strips any leading character in the set {s,e,l,f,.} and silently returns
+    # "ku_code_migration", which then reads as "not in list" and looks like the
+    # call is missing rather than misparsed.
+    calls = [
+        line.strip().removeprefix("self.").removesuffix("()")
+        for line in source.splitlines()
+        if line.strip().startswith("self.") and line.strip().endswith("()")
+    ]
+    removers = {"clickstream_outage"}
+    counters = {"sku_code_migration"}
+    for remover in removers:
+        for counter in counters:
+            assert calls.index(remover) < calls.index(counter), (
+                f"{remover} deletes rows and must run before {counter}, which counts them"
+            )
