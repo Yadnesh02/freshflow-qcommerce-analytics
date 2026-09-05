@@ -47,6 +47,25 @@ ENGINES = {
     "transfer": ("Transfer", "Move stock that will not clear to a store that is short"),
 }
 
+# An engine with no lines is not always an engine with nothing to say, and the
+# two empty engines here are empty for opposite reasons. Markdown is empty
+# because the measurement said so - that is a finding. Transfer is empty on the
+# deployed build because the demo slice carries five of the fourteen stores and
+# a transfer needs BOTH ends inside it; the engine did recommend arcs, they just
+# each have one endpoint the slice does not carry. Rendering the bare "nothing
+# recommended" for that case reports a filtering artefact as a result, which is
+# the one thing this app is supposed not to do.
+EMPTY_NOTES = {
+    "transfer": (
+        "**No transfer has _both_ ends inside this build.** The demo carries five of the "
+        "fourteen dark stores, and an arc whose other end is missing would be a dangling "
+        "reference, so it is dropped rather than drawn half-way — the full estate does "
+        "recommend transfers. They are scarce there too, and the reason is worth more than "
+        "the count: the binding constraint is how much is at risk at one end and short at "
+        "the other, not how far apart the stores are."
+    ),
+}
+
 st.set_page_config(page_title="Action Queue", page_icon=":material/checklist:", layout="wide")
 client = get_client()
 
@@ -122,7 +141,11 @@ for key, (label, blurb) in ENGINES.items():
     st.caption(blurb)
 
     if lines.empty:
-        st.caption("_Nothing recommended._")
+        note = EMPTY_NOTES.get(key)
+        if note is None:
+            st.caption("_Nothing recommended._")
+        else:
+            st.info(note, icon=":material/info:")
         continue
 
     basis = lines["value_basis"].iloc[0]

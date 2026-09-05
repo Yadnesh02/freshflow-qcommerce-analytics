@@ -175,3 +175,66 @@ def test_the_hero_page_shows_a_ranked_queue_with_money_on_it() -> None:
     assert "value" in queue.columns, "the queue has no rupee column - it is a table, not a queue"
     values = queue["value"].tolist()
     assert values == sorted(values, reverse=True), "the queue is not ranked by money at risk"
+
+
+def test_an_empty_transfer_queue_explains_itself_rather_than_reporting_nothing() -> None:
+    """An engine can be empty for two very different reasons, and the page must say which.
+
+    The markdown queue is empty because the measurement said so - every fitted
+    elasticity is inside the unit interval - and "nothing recommended" is the
+    honest reading of it. The transfer queue is empty on the *deployed* build
+    for a reason that is not a result at all: the demo slice carries five of the
+    fourteen stores, a transfer needs both ends inside it, and every arc the
+    engine found has one endpoint the slice does not carry. Rendering the same
+    bare caption for both presents a filtering artefact as a finding, on the one
+    page whose whole claim is that its numbers mean what they appear to mean.
+    """
+    page = next(p for p in PAGES if "Action_Queue" in p.name)
+    tree = ast.parse(page.read_text(encoding="utf-8"))
+    notes = next(
+        (
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(getattr(t, "id", None) == "EMPTY_NOTES" for t in node.targets)
+        ),
+        None,
+    )
+    assert notes is not None, "the page has no EMPTY_NOTES table"
+    keys = {k.value for k in notes.keys if isinstance(k, ast.Constant)}
+    assert "transfer" in keys, (
+        "the transfer engine has no empty-state note, so on the deployed slice it reports "
+        "'nothing recommended' for arcs that were in fact recommended and then filtered"
+    )
+
+
+def test_no_empty_state_note_hardcodes_a_recommendation_count() -> None:
+    """The note may explain the filter; it may not quote a number the build decides.
+
+    How many transfers the engine finds is a property of the warehouse in front
+    of it - three on the full estate, none inside the five-store slice - so a
+    digit written into the copy is correct for exactly one build and silently
+    wrong for every rebuild after it. This is the same failure as a skip that
+    never expires: it keeps reading as true long after it stopped being checked.
+    """
+    import re
+
+    page = next(p for p in PAGES if "Action_Queue" in p.name)
+    tree = ast.parse(page.read_text(encoding="utf-8"))
+    notes = next(
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and any(getattr(t, "id", None) == "EMPTY_NOTES" for t in node.targets)
+    )
+    written_numbers = re.compile(
+        r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", re.IGNORECASE
+    )
+    allowed = {"five", "fourteen", "both", "one"}  # the slice's own shape, fixed by demo_slice.py
+    for value in notes.values:
+        assert isinstance(value, ast.Constant), "empty-state notes must be literal strings"
+        found = {m.lower() for m in written_numbers.findall(value.value)}
+        assert found <= allowed, (
+            f"empty-state note quotes a build-dependent count {sorted(found - allowed)}; "
+            "say why the queue is empty, not how many rows another build would have"
+        )
