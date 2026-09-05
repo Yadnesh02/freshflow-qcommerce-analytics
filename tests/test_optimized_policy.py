@@ -262,3 +262,73 @@ def test_a_simulated_day_produces_actions(cfg) -> None:
     assert actions["order_lines"] > 0, "a simulated day produced no replenishment at all"
     assert actions["order_value"] > 0
     assert actions["policy"] == "optimized"
+
+
+# ================================================== markdown responds to disposal cost
+def _policy_at(cfg, catalog, bundle: dict, disposal: float, tmp_path) -> OptimizedPolicy:
+    """The same policy with one bundle parameter changed."""
+    edited = dict(bundle)
+    edited["markdown"] = {**bundle["markdown"], "disposal_cost_per_unit": disposal}
+    path = tmp_path / f"bundle_{disposal:.0f}.json"
+    path.write_text(json.dumps(edited), encoding="utf-8")
+    return OptimizedPolicy(cfg, catalog, bundle_path=path)
+
+
+def test_at_zero_disposal_cost_it_still_marks_nothing_down(cfg, catalog, bundle, tmp_path) -> None:
+    """S4.2's finding has to survive the rule being generalised.
+
+    "The optimiser recommends no markdown anywhere, and that is the answer" was
+    a correct reading of a zero disposal cost, not an artefact of the shortcut
+    the policy used to take. If evaluating the full objective changed the answer
+    at the declared parameter value, one of the two was wrong and this would say
+    so.
+    """
+    policy = _policy_at(cfg, catalog, bundle, 0.0, tmp_path)
+    depth = policy.markdown(make_context(catalog))
+    assert not (depth > 0).any(), "a markdown appeared at zero disposal cost"
+
+
+def test_above_breakeven_it_starts_cutting(cfg, catalog, bundle, tmp_path) -> None:
+    """The vacuity guard, and the reason the parameter is worth sweeping.
+
+    The test above passes on a rule that can never mark down at all - which is
+    exactly what the old rule was. Without this, S5.3 would sweep disposal cost
+    across a policy structurally incapable of responding to it and report a flat
+    line as a finding.
+    """
+    policy = _policy_at(cfg, catalog, bundle, 50.0, tmp_path)
+    depth = policy.markdown(make_context(catalog))
+    assert (depth > 0).any(), "the rule cannot respond to disposal cost at all"
+
+
+def test_more_disposal_cost_never_means_less_markdown(cfg, catalog, bundle, tmp_path) -> None:
+    """Monotone, because the objective says so.
+
+    Every unsold unit costs `cost + disposal_cost`, so raising that term can
+    only make clearing more attractive relative to holding. A rule that cut less
+    as disposal got dearer would be solving something other than the objective
+    it claims.
+    """
+    ctx = make_context(catalog)
+    marked = [
+        int((_policy_at(cfg, catalog, bundle, d, tmp_path).markdown(ctx) > 0).sum())
+        for d in (0.0, 5.0, 10.0, 25.0, 50.0)
+    ]
+    assert marked == sorted(marked), f"markdown coverage is not monotone in disposal cost: {marked}"
+    assert marked[-1] > marked[0], "the sweep spans no range at all"
+
+
+def test_it_never_prices_through_landed_cost(cfg, catalog, bundle, tmp_path) -> None:
+    """A depth that sells below cost is a more expensive write-off, not a cheaper clear.
+
+    Checked at a high disposal cost, where the pressure to clear is strongest
+    and the floor is therefore most likely to be crossed.
+    """
+    policy = _policy_at(cfg, catalog, bundle, 50.0, tmp_path)
+    ctx = make_context(catalog)
+    depth = policy.markdown(ctx)
+    price = catalog["base_price"].to_numpy().astype(float)[None, :]
+    cost = catalog["landed_cost"].to_numpy().astype(float)[None, :]
+    realised = price * (1.0 - depth)
+    below = (depth > 0) & (realised < cost - 1e-9)
+    assert not below.any(), f"{int(below.sum())} cells are marked down below landed cost"

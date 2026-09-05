@@ -102,6 +102,10 @@ class OptimizedPolicy(Policy):
             cell for cell in self.bundle["elasticity"] if cell["is_identified"]
         ]
 
+        md = self.bundle["markdown"]
+        self._depth_grid = np.asarray(md["depth_grid"], dtype=float)
+        self._disposal_cost = float(md["disposal_cost_per_unit"])
+
         deal = self.bundle["deal_slot"]
         self._deal_price = float(deal["deal_price"])
         self._slots = int(deal["slots_per_store_day"])
@@ -183,36 +187,64 @@ class OptimizedPolicy(Policy):
 
     # ------------------------------------------------------------- markdown
     def markdown(self, ctx: PolicyContext) -> np.ndarray:
-        """Cut only where a cut is measured to pay, which is almost nowhere.
+        """Cut where a cut pays, evaluating S4.2's objective over the depth grid.
 
-        While stock is short of demand the margin is `sold x price - qty x cost`
-        and the cost term does not move with price, so the decision is revenue,
-        proportional to `r ** (1 + beta)`. That exponent is positive for every
-        coefficient S4.1 fitted, so cutting loses more on the units already
-        selling than it wins on the ones it brings in. The rule therefore fires
-        only on elastic cells - and the honest consequence is that this arm
-        marks down far less than the baseline, not more.
+        **This rule used to test `beta < -1` and stop, and that was a defect
+        rather than a simplification.** The reasoning behind it was sound as far
+        as it went: while stock is short of demand the margin is
+        `sold x price - qty x cost`, the cost term does not move with price, so
+        the decision reduces to revenue and `r ** (1 + beta)` is increasing in
+        price for every coefficient S4.1 fitted. But that derivation silently
+        assumes an unsold unit costs nothing to be rid of. S4.2's objective does
+        not assume it - `analytics/optimization/markdown.py` evaluates
+        `sold x (price - cost) - unsold x (cost + disposal_cost)` - and the
+        bundle has carried `disposal_cost_per_unit` since S4.6.
+
+        So the policy hardcoded the very parameter S5.3 exists to vary, and the
+        consequence was not academic. The 180-day holdout found Policy B
+        expiring 76% MORE units than the baseline by the final month and writing
+        off 314% more value, in all thirty seeds, with the cost per expired unit
+        doubling from Rs 44.49 to Rs 93.37. A policy that can never mark down
+        has no price mechanism for clearing expensive at-risk stock, so the
+        expensive stock is what accumulates and dies. The baseline's crude flat
+        ladder gives away margin and does clear it.
+
+        The objective is now evaluated over the whole depth grid, so at a zero
+        disposal cost this still holds price nearly everywhere - the original
+        finding survives, because it was a correct reading of that assumption -
+        and above the breakeven it starts cutting.
         """
         out = np.zeros_like(ctx.on_hand, dtype=np.float64)
-        has_stock = ctx.on_hand > 0
         beta = self._elasticity_for(ctx.min_dte)
-
-        elastic = has_stock & np.isfinite(beta) & (beta < -1.0)
-        if not elastic.any():
+        usable = (ctx.on_hand > 0) & np.isfinite(beta)
+        if not usable.any():
             return out
 
-        # discount to where the stock just clears, never through landed cost
+        qty = ctx.on_hand.astype(np.float64)
+        price = self._base_price[None, :]
+        cost = self._landed_cost[None, :]
+        # Demand over the remaining shelf life, which is the window the decision
+        # is actually about: what does not sell before `min_dte` is written off.
         horizon = np.maximum(ctx.min_dte, 1.0)
-        clearing_ratio = np.divide(
-            ctx.on_hand,
-            np.maximum(ctx.trailing_avg * horizon, 1e-9),
-            out=np.ones_like(out),
-            where=elastic,
-        ) ** np.divide(1.0, beta, out=np.ones_like(out), where=elastic)
+        expected = np.maximum(ctx.trailing_avg * horizon, 0.0)
+        # Never price through landed cost. A depth that does is not a cheaper
+        # way to clear, it is a more expensive way to write off.
+        floor_ratio = cost / np.maximum(price, 1e-9)
 
-        floor_ratio = self._landed_cost[None, :] / np.maximum(self._base_price[None, :], 1e-9)
-        depth = np.clip(1.0 - np.maximum(clearing_ratio, floor_ratio), 0.0, 0.6)
-        return np.where(elastic, depth, out)
+        best_depth = np.zeros_like(out)
+        best_margin = np.full_like(out, -np.inf)
+        for depth in self._depth_grid:
+            ratio = 1.0 - float(depth)
+            if ratio <= 0:
+                continue
+            demand = expected * ratio**beta
+            sold = np.minimum(qty, demand)
+            margin = sold * (price * ratio - cost) - (qty - sold) * (cost + self._disposal_cost)
+            better = usable & (margin > best_margin) & (ratio >= floor_ratio)
+            best_depth = np.where(better, float(depth), best_depth)
+            best_margin = np.where(better, margin, best_margin)
+
+        return np.where(usable, np.clip(best_depth, 0.0, 0.6), out)
 
     # ------------------------------------------------------------- deal rail
     def deal_slots(self, ctx: PolicyContext) -> dict[int, list[int]]:
