@@ -44,7 +44,7 @@ from dagster import (
     asset_check,
     define_asset_job,
 )
-from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
+from dagster_dbt import DagsterDbtTranslator, DbtCliResource, DbtProject, dbt_assets
 
 from orchestration.assets.pipeline import (
     decision_tables,
@@ -76,7 +76,30 @@ dbt_project = DbtProject(
 )
 
 
-@dbt_assets(manifest=dbt_project.manifest_path)
+class LayerTranslator(DagsterDbtTranslator):
+    """Group dbt assets by warehouse layer instead of dumping them in `default`.
+
+    dagster-dbt puts every model in one group unless told otherwise, which draws
+    a lineage graph with fifty-four nodes in a box labelled "default" - readable
+    by nobody, and the graph is a deliverable here rather than a debugging aid.
+    Grouping by the model's top-level folder gives back the layering the project
+    is actually organised around: seeds, staging, marts.
+
+    **The fourteen dbt *sources* stay in `default`, and that is a limitation
+    rather than a choice.** They arrive as external assets and neither
+    `get_group_name` nor a `get_asset_spec` override is consulted for them in
+    dagster-dbt 0.29 - the override was written, did nothing, and was removed
+    rather than left in looking like it worked. They are the raw feeds, so
+    `default` reads as "everything upstream of staging", which is at least true.
+    """
+
+    def get_group_name(self, dbt_resource_props: dict) -> str | None:
+        path = dbt_resource_props.get("fqn") or []
+        # fqn is [project, folder, ..., name]; the folder is the layer.
+        return path[1] if len(path) > 2 else dbt_resource_props.get("resource_type", "dbt")
+
+
+@dbt_assets(manifest=dbt_project.manifest_path, dagster_dbt_translator=LayerTranslator())
 def dbt_models(context: AssetExecutionContext, dbt: DbtCliResource):
     """Every dbt model and test, as assets with their real lineage."""
     yield from dbt.cli(["build"], context=context).stream()
