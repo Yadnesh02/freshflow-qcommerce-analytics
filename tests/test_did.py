@@ -194,3 +194,50 @@ def test_having_both_spellings_present_does_not_double_count(tmp_path) -> None:
     loaded = load(tmp_path)
     assert len(loaded) == len(frame), "seeds were counted twice"
     assert loaded["seed"].nunique() == 4
+
+
+# ==================================================== the readout table
+def test_a_blank_row_is_not_confused_with_a_computed_one() -> None:
+    """`None` in a mixed column comes back as NaN, and `if nan:` is True.
+
+    That is not a hypothetical: the first version printed all three computed
+    metrics as blank AND listed them among the unfilled reasons, each with "nan"
+    as its explanation - a table in which every real number was hidden and every
+    hidden number was explained.
+    """
+    from analytics.experiment.readout import _unfilled
+
+    assert _unfilled("a stated reason")
+    assert not _unfilled(None)
+    assert not _unfilled(float("nan"))
+    assert not _unfilled("")
+
+
+def test_the_readout_names_what_it_cannot_answer() -> None:
+    """Two of the plan's six rows are not A/B outcomes, and must say so.
+
+    Leaving them out would read as an oversight and filling them would be the
+    back-fitting the plan explicitly warns against. Each carries the reason it
+    cannot be computed, which is the only version that survives being asked
+    about in an interview.
+    """
+    from analytics.experiment.readout import NOT_APPLICABLE
+
+    assert set(NOT_APPLICABLE) == {"retention_90d", "forecast_wape"}
+    for metric, reason in NOT_APPLICABLE.items():
+        assert len(reason) > 40, f"{metric} does not explain why it is unfilled"
+
+
+def test_gm_awm_is_reported_separately_from_gross_margin() -> None:
+    """The two disagree, and the north star is the one after wastage.
+
+    Policy B earns a better gross margin and a worse GM-AWM: it sells more at a
+    slightly better rate and writes off roughly twice as much. A readout
+    carrying only `margin` would have reported a win. The registry's north star
+    is `gm_awm`, so the table has to carry it.
+    """
+    from analytics.experiment.readout import ROWS
+
+    metrics = {name for name, _expr, _unit in ROWS}
+    assert "gm_awm_pct" in metrics, "the readout omits the north-star metric"
+    assert "wastage_rate_value" in metrics, "the readout omits the wastage it nets off"

@@ -337,6 +337,7 @@ def test_per_store_outcomes_sum_to_the_estate_totals() -> None:
         "cogs",
         "orders",
         "stockout_cells",
+        "markdown_subsidy",
     ):
         assert per_store[column].sum() == pytest.approx(estate[column].sum(), abs=0.01), (
             f"{column} does not reconcile: the per-store rows and the estate total disagree"

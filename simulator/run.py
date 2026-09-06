@@ -97,6 +97,7 @@ class DayCounters:
     cogs: float = 0.0
     orders: int = 0
     stockout_cells: int = 0
+    markdown_subsidy: float = 0.0
 
 
 @dataclass
@@ -402,6 +403,7 @@ class SimulationRun:
                 "cogs",
                 "orders",
                 "stockout_cells",
+                "markdown_subsidy",
             )
         }
 
@@ -525,6 +527,14 @@ class SimulationRun:
                     per_store["units_sold"][si] += a.qty
                     per_store["revenue"][si] += a.qty * unit_price
                     per_store["cogs"][si] += a.qty * cost
+                    # What the discount gave away, which the readout reports as
+                    # the markdown subsidy. Measured against base price rather
+                    # than against cost, because the question the table asks is
+                    # how much price was surrendered, not whether the unit was
+                    # sold above cost.
+                    given_away = a.qty * (float(self.base_price[sold_sku]) - unit_price)
+                    c.markdown_subsidy += given_away
+                    per_store["markdown_subsidy"][si] += given_away
                     if a.shelf_life_fraction < LOW_DTE_FRACTION:
                         self.customers.record("low_dte", np.array([cust]))
                     if _promo_id(discount[si, sold_sku], sold_sku in deals.get(si, [])):
