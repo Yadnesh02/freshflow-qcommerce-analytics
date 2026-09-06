@@ -126,6 +126,25 @@ def t_build(args: argparse.Namespace) -> int:
     return dbt("build", *extra)
 
 
+def t_parse(_: argparse.Namespace) -> int:
+    """Write transform/target/manifest.json without touching a warehouse.
+
+    **The orchestration tests cannot be collected without this file.**
+    `orchestration/definitions.py` builds its dbt assets from the manifest at
+    import time, and a missing manifest raises during pytest *collection* -
+    which aborts the whole session rather than failing eight tests. That is
+    what took `ci.yml` red from `3a745da` until this existed: the manifest is a
+    build artefact under `transform/target/`, which is gitignored, so it was
+    present on the machine that wrote the code and on no clean runner.
+
+    `parse` rather than `compile` or a full build: it renders the project and
+    writes the manifest without connecting to anything, so it runs before the
+    dataset exists and costs a few seconds.
+    """
+    _ensure_dbt_deps()
+    return dbt("parse")
+
+
 def t_test(_: argparse.Namespace) -> int:
     """Run the python test suite."""
     return py("-m", "pytest")
@@ -428,6 +447,7 @@ TARGETS = {
     "setup": t_setup,
     "simulate": t_simulate,
     "build": t_build,
+    "parse": t_parse,
     "test": t_test,
     "gate": t_gate,
     "profile": t_profile,

@@ -38,6 +38,23 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+      # Before the tests, and not optional. `orchestration/definitions.py`
+      # builds its dbt assets from transform/target/manifest.json at import
+      # time, so without it tests/test_orchestration.py raises during pytest
+      # *collection* - and a collection error aborts the entire session rather
+      # than failing eight tests. That is precisely how this workflow went red
+      # at 3a745da and stayed red for seven commits while warehouse.yml was
+      # green: the manifest is a gitignored build artefact, present on the
+      # machine that wrote the code and on no clean runner.
+      #
+      # `parse` writes the manifest without connecting to anything, so it runs
+      # here rather than after the dataset exists. The alternative - skipping
+      # the orchestration tests when the manifest is absent - would have made
+      # CI green by removing the asset graph from it, and a skip that never
+      # expires is indistinguishable from a pass.
+      - name: Parse the dbt project
+        run: uv run python tasks.py parse
+
       - name: Tests
         run: uv run pytest --cov=analytics --cov=semantic --cov=simulator --cov-report=term-missing
 
