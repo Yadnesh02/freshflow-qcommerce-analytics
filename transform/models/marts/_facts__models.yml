@@ -143,7 +143,7 @@ models:
           - not_null
       - name: unfulfilled_units
         description: >
-          requested_units minus what was actually served: 1.11M units, 20.6% of
+          requested_units minus what was actually served: 1.12M units, 20.74% of
           intended demand. The strongest censored-demand signal in the dataset,
           because unlike the clickstream it is a specific customer asking for a
           specific quantity rather than an anonymous impression. Never negative.

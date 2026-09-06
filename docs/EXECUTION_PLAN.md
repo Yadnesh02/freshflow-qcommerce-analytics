@@ -269,10 +269,13 @@ cannot supply, and each is one line in a config rather than buried in a model.
 
 - **Delivery cost, `assumed_delivery_cost_per_order` = ₹42** (`transform/dbt_project.yml`).
   Contribution by discount-dependency band reorders around it, and the low-DDI and
-  medium-DDI curves cross at **₹28.6** — the figure in use sits 47% above that
+  medium-DDI curves cross at **₹34** — the figure in use sits 24% above that
   crossover. So "our least discount-dependent customers are the most valuable" is a
-  statement about the delivery cost, not about the customers. At ₹70 the low-DDI band
-  goes negative outright. `mart_customer_360`'s header carries the full table.
+  statement about the delivery cost, not about the customers. **The declared ₹42 is
+  bracketed**: above the ₹34 where medium passes low, below the ₹48 where high passes
+  it. At ₹70 the low-DDI band goes negative outright. `mart_customer_360`'s header
+  carries the full table. *(Re-derived from run 34020638496; the earlier ₹28.6 and
+  "47% above" predate `04737af`'s substream change.)*
 
 - **Markdown disposal cost, `--disposal-cost` = ₹0/unit** (`analytics/optimization/markdown.py`).
   At zero, S4.2 recommends **no markdown anywhere** — every fitted elasticity is

@@ -8,10 +8,10 @@
     than each count separately is what catches a filter changing under one of
     them: three columns that each look plausible alone can still stop adding up.
 
-    76,121 unfulfilled headers across the estate is 4.9% of orders, and the gap
-    between the two denominators is 5.1% of aov. That is large enough that a
-    silent change of mind about which one aov divides by would move a headline
-    tile without moving anything a test currently watches.
+    77,273 unfulfilled headers across the estate is 5.0% of orders, and the gap
+    between the two denominators is a similar share of aov. That is large enough
+    that a silent change of mind about which one aov divides by would move a
+    headline tile without moving anything a test currently watches.
 #}
 
 select

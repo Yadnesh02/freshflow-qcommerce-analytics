@@ -67,19 +67,24 @@
     is the answer P7 exists to produce, reorders itself around it:
 
         delivery Rs/order    low-DDI   medium-DDI   high-DDI   best
-                        0       1073          775        486   low
-                       20        747          657        436   low
-                       30        584          598        412   medium
-                       42        388          527        382   medium
-                       60         94          421        338   medium
-                       70        -69          362        313   medium
+                        0       1044          701        389   low
+                       20        714          585        341   low
+                       30        549          527        317   low
+                       42        351          457        288   medium
+                       60         53          353        245   medium
+                       70       -112          294        221   medium
 
     Low-DDI customers order 16.3 times a quarter against 2.5 for the high-DDI
     band, so a per-order cost falls on them hardest, and the two curves cross at
-    28.6 rupees. The assumption in use sits 47% above that crossover - close
-    enough that "our least discount-dependent customers are the most valuable"
-    is a statement about the delivery cost, not about the customers. At 70
-    rupees the low-DDI band goes negative outright.
+    34 rupees. The assumption in use sits 24% above that crossover - close enough
+    that "our least discount-dependent customers are the most valuable" is a
+    statement about the delivery cost, not about the customers. At 70 rupees the
+    low-DDI band goes negative outright.
+
+    A second crossover the earlier reading did not mention: low overtakes high
+    on the way down too, reversing at 48 rupees, and the declared 42 sits below
+    that one. So the declared cost is bracketed - above the point where medium
+    passes low, below the point where high passes it.
 
     The honest reading is therefore narrower than the P7 hypothesis expects:
     high-DDI customers here are not value-destroying, they are simply small -

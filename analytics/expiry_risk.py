@@ -34,9 +34,9 @@ simulated.
 batch is scored, and `risk_state` says what kind of number it got:
 
   - `expired` - the expiry date has already passed and units remain. P(unsold)
-    is 1 by definition; there is nothing to predict, only to book. 17,293
-    batches carrying Rs 1.3M sit here, 6.9% of expired batches, and they are
-    kept visible rather than dropped because they are a real loss. They are
+    is 1 by definition; there is nothing to predict, only to book. 16,918
+    batches carrying Rs 1.25M sit here, and they are kept visible rather than
+    dropped because they are a real loss. They are
     not, however, *actionable* - no markdown recovers stock that has already
     gone - so the action queue filters to `at_risk` and this state is the
     reason it has to.

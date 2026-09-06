@@ -463,9 +463,9 @@ models:
       - name: orders_count
         description: >
           Delivered orders - headers with at least one fulfilled line. The aov
-          denominator, and deliberately not count(*): 76,121 headers were served
-          nothing at all, and including them reads aov as Rs 278.29 against
-          Rs 292.56 on delivered orders.
+          denominator, and deliberately not count(*): 77,273 headers were served
+          nothing at all, and including them reads aov lower than the Rs 291.84
+          on delivered orders.
         data_tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:

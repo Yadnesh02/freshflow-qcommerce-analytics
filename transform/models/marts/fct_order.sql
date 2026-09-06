@@ -8,7 +8,7 @@
     and the better one.** The POS writes `n_units` when the basket is created,
     before FEFO allocation runs, so it records what the customer intended to
     buy rather than what the store managed to serve. The difference is demand
-    that existed and was lost: 1.11M units, 20.6% of everything intended, with
+    that existed and was lost: 1.12M units, 20.74% of everything intended, with
     half of all orders short-filled.
 
     That makes it more useful than the clickstream for uncensoring. The

@@ -16,7 +16,7 @@ documentation quietly goes stale: it is expensive enough that it gets deferred,
 and once deferred nobody can tell which numbers were checked.
 
 **What it deliberately does not cover.** Figures that are the output of a fitted
-model rather than a query - the 3.57x deal uptake multiplier, the Rs 28.6
+model rather than a query - the 3.57x deal uptake multiplier, the Rs 34
 delivery-cost crossover, the Rs 426,683 the deal line loses in a year. Those
 come from an estimator, not a `select`, and re-deriving them means re-running
 the module that owns them. Each of those modules prints its own summary, and
@@ -69,7 +69,7 @@ FIGURES: tuple[Figure, ...] = (
         "gross_margin_pct",
         "select 100.0 * (sum(net_revenue) - sum(cogs)) / nullif(sum(net_revenue), 0) "
         "from marts.agg_store_sku_day",
-        "README, plan baseline (24.4%)",
+        "README, plan baseline (24.5%)",
         "percent",
     ),
     Figure(
@@ -80,12 +80,12 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         "expired_batches",
         "select count(*) from marts.mart_expiry_risk where risk_state = 'expired'",
-        "expiry_risk.py docstring (17,293 batches, Rs 1.3M) - a booked loss, not actionable",
+        "expiry_risk.py docstring (16,918 batches, Rs 1.25M) - a booked loss, not actionable",
     ),
     Figure(
         "expired_value",
         "select sum(value_at_risk_inr) from marts.mart_expiry_risk where risk_state = 'expired'",
-        "expiry_risk.py docstring (Rs 1.3M)",
+        "expiry_risk.py docstring (Rs 1.25M)",
         "money",
     ),
     Figure(
@@ -110,31 +110,38 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         "unfulfilled_units",
         "select sum(unfulfilled_units) from marts.fct_order",
-        "S2.4's censored-demand signal (1,111,254 units)",
+        "S2.4's censored-demand signal (1.12M units)",
     ),
     Figure(
         "unfulfilled_share_pct",
         "select 100.0 * sum(unfulfilled_units) / nullif(sum(requested_units), 0) "
         "from marts.fct_order",
-        "S2.4 (20.6% of intended demand)",
+        "S2.4 (20.74% of intended demand)",
         "percent",
     ),
     Figure(
         "short_filled_orders_pct",
         "select 100.0 * count(*) filter (where is_short_filled) / nullif(count(*), 0) "
         "from marts.fct_order",
-        "S2.4 (50.4% of orders short-filled)",
+        "S2.4 (50.51% of orders short-filled)",
         "percent",
     ),
     Figure(
         "elasticity_cells_identified",
         "select count(*) from marts.mart_price_elasticity where is_identified",
-        "S4.1/S4.2 (14 of 23 identified, 9 not)",
+        "S4.1/S4.2 (13 of 23 identified, 10 not)",
     ),
+    # `min`, not `max`. These coefficients are negative, so the strongest price
+    # response is the most negative one and `max` returns the *weakest* - the
+    # cell closest to zero. This read -0.0625 against a documented -0.97 and
+    # looked like a figure that had drifted by a factor of fifteen; it was the
+    # opposite end of the same range. A checklist that reports the wrong end of
+    # a distribution is worse than one that omits it, because the mismatch
+    # invites somebody to "correct" a claim that was right.
     Figure(
         "strongest_elasticity",
-        "select max(elasticity) from marts.mart_price_elasticity where is_identified",
-        "Price Elasticity page (-0.97, none reaches -1)",
+        "select min(elasticity) from marts.mart_price_elasticity where is_identified",
+        "Price Elasticity page (none reaches -1)",
         "coefficient",
     ),
     Figure("rec_markdown_rows", "select count(*) from marts.rec_markdown", "S4.2, the anchors"),
@@ -142,17 +149,18 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         "rec_transfer_order_rows",
         "select count(*) from marts.rec_transfer_order",
-        "S4.4 (3 transfers estate-wide)",
+        "S4.4 (5 rows estate-wide)",
     ),
     Figure(
         "rec_purchase_order_rows",
         "select count(*) from marts.rec_purchase_order",
-        "S4.5 (11,824 lines, cap binds on 177) - also the laptop/runner 4,187 vs 4,178 gap",
+        "S4.5 (11,598 lines) - also the laptop/runner 4,187 vs 4,178 gap",
     ),
-    # net_units > 0, not line_count > 0: 76,121 headers (4.9%) are total
+    # net_units > 0, not line_count > 0: 77,273 headers (5.0%) are total
     # stockouts at pick time - a basket was built and nothing was fulfilled.
-    # The registry says "per delivered order", and including them moves AOV by
-    # 5.1% (Rs 278.29 against Rs 292.56).
+    # The registry says "per delivered order", and including them moves AOV
+    # materially - `aov` and `aov_all_headers` below report both denominators,
+    # so the gap is measured here rather than quoted from a previous build.
     Figure(
         "orders_delivered",
         "select count(*) from marts.fct_order where net_units > 0",
@@ -161,13 +169,32 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         "orders_total_stockout",
         "select count(*) from marts.fct_order where net_units = 0",
-        "S4.2 note (76,121 headers, 4.9%) - the AOV denominator choice",
+        "S4.2 note (77,273 headers, 5.0%) - the AOV denominator choice",
     ),
     Figure(
         "aov",
         "select sum(net_revenue) / nullif(count(distinct order_id), 0) from marts.fct_order_item",
-        "README and the Executive page (Rs 292.56)",
+        "README and the Executive page",
         "money",
+    ),
+    # The other denominator, measured rather than derived. The docs quote both
+    # AOVs and the gap between them, and only the delivered one was reported
+    # here - so re-deriving the pair meant either another run or arithmetic on
+    # a rounded figure and an assumption about which orders carry items. Two
+    # queries is cheaper than either.
+    Figure(
+        "aov_all_headers",
+        "select (select sum(net_revenue) from marts.fct_order_item)"
+        " / nullif((select count(*) from marts.fct_order), 0)",
+        "metrics.yml and mart_order_daily's header, as the rejected denominator",
+        "money",
+    ),
+    # The denominator behind expiry_risk.py's "% of batches" claim, which could
+    # not be re-derived from the counts already listed.
+    Figure(
+        "batches_scored",
+        "select count(*) from marts.mart_expiry_risk",
+        "expiry_risk.py docstring, as the denominator for its expired share",
     ),
 )
 

@@ -26,8 +26,8 @@
     because two tables in the executive family disagreeing about revenue is
     the failure that makes a dashboard unusable.
 
-    **76,121 orders were served nothing at all, and they decide what AOV
-    means.** 4.9% of headers carry a basket the customer built and zero
+    **77,273 orders were served nothing at all, and they decide what AOV
+    means.** 5.0% of headers carry a basket the customer built and zero
     fulfilled lines - `requested_units` above zero, `gross_units` at zero, no
     returns, no revenue. That is a total stockout at pick time, the extreme of
     the short-fill this dataset is full of, and it is a real event rather than
@@ -35,10 +35,12 @@
 
     They are excluded from `orders_count`, because the registry defines aov as
     revenue per *delivered* order and nothing was delivered. The choice is worth
-    a paragraph because it moves the tile: including them gives Rs 278.29,
-    excluding them Rs 292.56, a 5.1% gap on a headline number. Dividing revenue
-    by a denominator that counts baskets nobody received would not be
-    conservative, it would be measuring a different thing quietly.
+    a paragraph because it moves the tile: excluding them gives Rs 291.84, and
+    including them gives a materially lower figure - `analytics/published.py`
+    reports it as `aov_all_headers` so the pair is measured together rather
+    than one of them being carried in prose. Dividing revenue by a denominator
+    that counts baskets nobody received would not be conservative, it would be
+    measuring a different thing quietly.
 
     The count is kept as `unfulfilled_orders`, and every header is still
     counted in `placed_orders`, so the two denominators are both on the table

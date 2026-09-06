@@ -125,7 +125,7 @@ Numbers a reader can check against the code, not claims.
 | **Censored demand** | A SKU that ran out at 07:00 had seen **6.7%** of the day's demand, not the 29% the clock suggests. Correcting by a fitted arrival curve instead of by hours moved measured lost sales from 94,350 to **213,230 units** — and *down* for evening stockouts, which a flat multiplier cannot do. |
 | **Forecast** | LightGBM beats seasonal naive on all nine ABC-XYZ classes (**FVA +0.204** on A/X). It beats a *zero* forecast on four of nine — and the app says which, because on 80%-zero series WAPE rewards predicting nothing. |
 | **Expiry risk** | Across risk bands, realised write-off runs **0%, 0%, 0%, 1.7%, 42%**. Validated against the seven days after the scoring date, not asserted. |
-| **Customers** | Contribution by discount-dependency band reorders at **₹28.6** delivery cost per order; the assumption in use is ₹42. So "our least discount-dependent customers are the most valuable" is a statement about delivery cost, not about customers. |
+| **Customers** | Contribution by discount-dependency band reorders at **₹34** delivery cost per order; the assumption in use is ₹42, which sits above it. So "our least discount-dependent customers are the most valuable" is a statement about delivery cost, not about customers. |
 
 Each of those lives in the docstring of the model that produced it, with the query that measured it.
 
