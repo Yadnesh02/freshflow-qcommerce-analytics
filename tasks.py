@@ -346,6 +346,24 @@ def t_app(args: argparse.Namespace) -> int:
 
 def t_dagster(_: argparse.Namespace) -> int:
     """Open the Dagster UI."""
+    # Dagster lives in the project virtualenv, not on the system Python, so
+    # `python tasks.py dagster` from a shell without the venv activated fails
+    # with a bare "No module named dagster" that names neither the cause nor
+    # the fix. Almost every other target here is stdlib-only or shells out to
+    # something on PATH, which is why this is the first one where running the
+    # wrong interpreter surfaces at all - and why the message has to do the
+    # work the traceback does not.
+    try:
+        import dagster  # noqa: F401
+    except ModuleNotFoundError:
+        print(f"\n\033[31mdagster is not installed for {sys.executable}\033[0m")
+        print("  That is the system Python. Use the project virtualenv instead:\n")
+        print("    PowerShell:  .\\.venv\\Scripts\\python.exe tasks.py dagster")
+        print("    bash:        .venv/Scripts/python.exe tasks.py dagster\n")
+        print("  Or activate it once, then plain `python` works for everything:\n")
+        print("    .\\.venv\\Scripts\\Activate.ps1\n")
+        return 1
+
     os.environ.setdefault("DAGSTER_HOME", str(ROOT / "dagster_home"))
     home = Path(os.environ["DAGSTER_HOME"])
     home.mkdir(exist_ok=True)
