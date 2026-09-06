@@ -4,6 +4,12 @@
     "elasticity_cells": 23,
     "elasticity_identified": 13,
     "lead_time_categories": 12,
+    "fitted_from": {
+      "agg_rows": 6324308,
+      "net_revenue": 432431889.3,
+      "workflow_run": "34028321712",
+      "commit": "b5adb77451b4745f1f20c73ab80d0422d453518d"
+    },
     "note": "Fitted parameters only. No per-day recommendations and no simulator ground truth: a policy reading either would be scoring its own future."
   },
   "demand": {

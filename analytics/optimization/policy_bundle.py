@@ -87,6 +87,37 @@ order by products.l1_category
 """
 
 
+def fitted_from(con: duckdb.DuckDBPyConnection) -> dict:
+    """Which warehouse produced these parameters, in the terms the project uses.
+
+    **This block exists because its absence cost a sprint.** The committed
+    bundle had been exported from the development laptop's warehouse - a build
+    that fails five of the seven anchors - and Policy B read it for five
+    sprints. All twenty-three elasticity cells differed from what a clean runner
+    fits, two with the sign reversed. Nothing caught it, because the old
+    provenance recorded how many cells there were and never which build they
+    came from: the experiment reproduced perfectly from a clone and would never
+    have reproduced from a rebuild.
+
+    Recording the two shape-and-money anchors is enough to identify a build, and
+    they are the numbers `analytics/anchors.py` already pins, so
+    `test_the_bundle_was_fitted_on_a_build_that_holds_the_anchors` can compare
+    the two without a warehouse in front of it.
+
+    The run id is here for the second question a reader asks - *which* clean
+    build - and is "local" off a runner, which is itself the useful signal.
+    """
+    rows, revenue = con.execute(
+        "select count(*), round(sum(net_revenue), 2) from marts.agg_store_sku_day"
+    ).fetchone()
+    return {
+        "agg_rows": int(rows),
+        "net_revenue": float(revenue),
+        "workflow_run": os.environ.get("GITHUB_RUN_ID", "local"),
+        "commit": os.environ.get("GITHUB_SHA"),
+    }
+
+
 def build(con: duckdb.DuckDBPyConnection) -> dict:
     """Assemble the bundle from the marts Sprint 4 produced."""
     con.execute("set memory_limit = '4GB'")
@@ -126,6 +157,7 @@ def build(con: duckdb.DuckDBPyConnection) -> dict:
             "elasticity_cells": len(elasticity),
             "elasticity_identified": identified,
             "lead_time_categories": len(lead_times),
+            "fitted_from": fitted_from(con),
             "note": (
                 "Fitted parameters only. No per-day recommendations and no simulator "
                 "ground truth: a policy reading either would be scoring its own future."
@@ -191,6 +223,16 @@ def report(bundle: dict, path: Path) -> int:
     print(f"    lead-time categories    {prov['lead_time_categories']:>6}")
     print(f"    dispersion k            {bundle['demand']['dispersion_k']:>6.3f}")
     print(f"    pooled lead time p90    {bundle['lead_time_days']['pooled_p90']:>6.1f} days")
+
+    # Printed rather than buried in the file, because the failure this catches
+    # is somebody committing a bundle fitted on the wrong warehouse - and the
+    # moment to notice is while the run that produced it is still on screen.
+    source = prov["fitted_from"]
+    print(
+        f"\n    fitted from             {source['agg_rows']:,} rows, "
+        f"net revenue {source['net_revenue']:,.2f}"
+    )
+    print(f"    workflow run            {source['workflow_run']}")
 
     print("\n  lead time by category, against the baseline's single assumed 2.5 days:")
     for category, stats in sorted(
