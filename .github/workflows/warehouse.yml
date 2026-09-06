@@ -150,7 +150,9 @@ jobs:
       # dbt step above is the integrity check; assuming otherwise is precisely
       # the inference that let the phantom store survive a session.
       - name: Anchors
-        run: uv run python tasks.py anchors
+        run: |
+          mkdir -p reports
+          uv run python tasks.py anchors | tee reports/anchors.txt
 
       # A report, not a gate - it cannot fail, and it runs after the anchors so
       # a build that disagrees with them still prints the figures somebody has
@@ -160,8 +162,13 @@ jobs:
       # 04737af means grepping a dozen files for digits and re-running analyses
       # one at a time, which is expensive enough to get deferred - and once
       # deferred, nobody can tell which figures were checked.
+      # Tee'd to a file as well as the log. The log needs a browser and a
+      # sign-in to read; the file rides along in the build artifact, so the
+      # figures can be picked up without anybody transcribing a table.
       - name: Published figures
-        run: uv run python tasks.py published
+        run: |
+          mkdir -p reports
+          uv run python tasks.py published | tee reports/published_figures.txt
 
       # S5.3's analysis-side sensitivity. It needs no simulation - it recomputes
       # contribution from the warehouse that was just built, at a delivery cost
@@ -169,7 +176,9 @@ jobs:
       # build rather than in the sweep matrix, which would have implied a
       # compute cost it does not have.
       - name: Delivery-cost crossover
-        run: uv run python tasks.py delivery-sweep
+        run: |
+          mkdir -p reports
+          uv run python tasks.py delivery-sweep | tee reports/delivery_cost.txt
 
       # The Python contract tests that need a warehouse - the staging contract
       # asserts each injected defect was repaired by the amount dirt.json says
@@ -193,6 +202,7 @@ jobs:
             serving/demo/freshflow_demo.duckdb
             simulator/config/policy_bundle.json
             data/_manifest/dirt.json
+            reports/
           retention-days: 14
           if-no-files-found: warn
 

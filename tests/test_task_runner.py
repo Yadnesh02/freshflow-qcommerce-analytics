@@ -56,7 +56,16 @@ def task_invocations() -> list[tuple[str, list[str]]]:
             continue
         argv = shlex.split(line)
         index = next(i for i, token in enumerate(argv) if token.endswith("tasks.py"))
-        found.append((f"{name}: {line}", argv[index + 1 :]))
+        argv = argv[index + 1 :]
+        # A pipeline's later commands are not this one's arguments. warehouse.yml
+        # tees its reports into the build artifact - `tasks.py published | tee
+        # reports/...` - and without this the extractor handed argparse the pipe
+        # and the filename, then reported the workflow as broken when it was the
+        # test that could not read a shell.
+        for terminator in ("|", ">", ">>", "&&", ";"):
+            if terminator in argv:
+                argv = argv[: argv.index(terminator)]
+        found.append((f"{name}: {line}", argv))
     return found
 
 
