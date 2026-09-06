@@ -242,6 +242,11 @@ def t_delivery_sweep(args: argparse.Namespace) -> int:
     return py("-m", "analytics.delivery_cost", "--warehouse", str(args.warehouse))
 
 
+def t_sql_showcase(args: argparse.Namespace) -> int:
+    """Run every query in sql_showcase/ and report what each returned."""
+    return py("-m", "analytics.showcase", "--warehouse", str(args.warehouse))
+
+
 def t_soda(args: argparse.Namespace) -> int:
     """Scan a built warehouse for freshness and coverage breaches."""
     return py("-m", "quality.scan", "--warehouse", str(args.warehouse))
@@ -470,6 +475,7 @@ TARGETS = {
     "sensitivity": t_sensitivity,
     "attribution": t_attribution,
     "delivery-sweep": t_delivery_sweep,
+    "sql-showcase": t_sql_showcase,
     "soda": t_soda,
     "demo-slice": t_demo_slice,
     "publish-demo": t_publish_demo,
@@ -512,7 +518,7 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if name == "lint":
             p.add_argument("--fix", action="store_true")
-        if name in ("anchors", "published", "delivery-sweep", "soda"):
+        if name in ("anchors", "published", "delivery-sweep", "soda", "sql-showcase"):
             p.add_argument(
                 "--warehouse",
                 type=Path,
