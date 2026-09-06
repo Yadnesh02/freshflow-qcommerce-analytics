@@ -487,6 +487,49 @@ models:
         data_tests:
           - not_null
 
+  - name: mart_experiment_readout
+    description: >
+      The policy backtest readout - one row per plan §10 metric, with Policy A,
+      Policy B, the difference-in-differences, its 95% interval and whether the
+      sign held across seeds. **Gate G5 is that every published number is
+      traceable to this table**, which is why it carries a contract at all: it
+      was the one mart in the project with no schema entry, so the terminal
+      table of the traceability chain was the only one nothing asserted.
+
+      Statistics are computed in `analytics/experiment/` and land here through a
+      committed parquet source. This model adds ordering and presentation, not
+      arithmetic - recomputing an interval in SQL would put a second
+      implementation in the warehouse for the two to disagree about.
+
+      `delta` is a difference-in-differences and is NOT `policy_b - policy_a`.
+      Subtracting the two columns gives a different, wrong number.
+    columns:
+      - name: metric
+        description: "One row per metric. The north star, gm_awm_pct, sorts first."
+        data_tests:
+          - not_null
+          - unique
+      - name: is_measured
+        description: >
+          False on rows the design cannot answer, which carry nulls and a stated
+          reason rather than zeros. A zero would render as a measured result of
+          no effect, which is the opposite of "this design cannot see it".
+        data_tests:
+          - not_null
+      - name: not_applicable_reason
+        description: >
+          Why an unmeasured row is unmeasured - retention is customer-level
+          while the holdout randomises stores; WAPE has no Policy A column
+          because Policy A does not forecast.
+      - name: seeds
+        description: "Independent worlds behind the interval. 30 on the published run."
+      - name: display_unit
+        description: >
+          The unit the row is formatted in, so a ratio never renders as rupees
+          on a page that shows all six metrics in one table.
+        data_tests:
+          - not_null
+
 seeds:
   - name: dte_bands
     description: "Source lookup for dim_dte_band."

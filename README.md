@@ -49,6 +49,12 @@ fetches its warehouse slice from a GitHub Release on wake.
 | 4 | Decision engine | ✅ done — gate G4 passed |
 | 5 | Impact proof, orchestration, polish | 🚧 9/10 — experiment, holdout, sensitivity, ablation, readout, Dagster, data quality and the SQL showcase done; final docs remain |
 
+Gates G1–G4 are marked passed in [the plan's checkpoint table](docs/EXECUTION_PLAN.md), each with the
+test that carries it named rather than asserted. **G5 is deliberately unmarked** until Sprint 5
+closes — its reproducibility half is evidenced, and its traceability half was a real hole until
+`mart_experiment_readout`, the terminal table of the whole chain, was given the contract every other
+mart already had.
+
 ---
 
 ## Stack
