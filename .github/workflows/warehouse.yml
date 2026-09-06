@@ -196,11 +196,25 @@ jobs:
           mkdir -p reports
           uv run python tasks.py soda | tee reports/soda.txt
 
-      - name: Warehouse contract tests
-        run: uv run pytest -m needs_warehouse
-
+      # **Built before the contract tests, not after, and the order is the
+      # point.** `tests/test_demo_slice.py` is marked `needs_warehouse` and
+      # skips when there is no slice in front of it. A clean runner has none
+      # until this step runs, so with the tests first all eighteen of them
+      # skipped on every build - including
+      # `test_the_slice_has_headroom_rather_than_just_fitting`, whose entire
+      # subject is that this file produced 73.3 MB on a laptop and 90.3 MB on a
+      # runner from the same commit. The one check written for CI was the one
+      # check CI never ran, and the only thing gating a publish was the hard
+      # ceiling inside `tasks.py demo-slice`.
       - name: Build the demo slice
         run: uv run python tasks.py demo-slice
+
+      # Now covers the slice as well as the warehouse: the staging contract,
+      # which asserts each injected defect was repaired by the amount
+      # data/_manifest/dirt.json says was injected, and the eighteen slice tests
+      # that were skipping.
+      - name: Warehouse contract tests
+        run: uv run pytest -m needs_warehouse
 
       # Always, so a failed run is still inspectable. The policy bundle is here
       # because a change in it is a change in what Policy B does, and that is
