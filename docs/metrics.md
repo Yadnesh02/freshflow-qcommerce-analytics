@@ -267,7 +267,7 @@ Seasonal-naive WAPE minus model WAPE. If this is not positive the model is theat
 | **Grain** | `abc_class`, `xyz_class` |
 | **Format** | `percent_1dp` |
 | **Direction** | higher is better |
-| **Expected range** | — |
+| **Expected range** | -1.0 to 1.0 |
 | **Owner** | analytics |
 
 ### `forecast_wape` — Forecast WAPE

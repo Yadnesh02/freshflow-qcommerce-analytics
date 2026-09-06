@@ -320,6 +320,15 @@ metrics:
     grain: [abc_class, xyz_class]
     format: percent_1dp
     direction: up_is_good
+    # Declared because its absence hid a real defect. This is the only metric
+    # with a compound numerator that is actually built, the resolver composed it
+    # unbracketed as `A - B / C`, and the tile read 39,282,721.3% on the live app
+    # for weeks. test_metric_values_respect_their_declared_bounds skips any
+    # metric with no range, so the one check that would have caught it sat out.
+    # Beating the naive rule by more than the volume it forecasts is not a
+    # forecast improvement, it is an arithmetic error.
+    tests:
+      - between: [-1.0, 1.0]
 
 # -----------------------------------------------------------------------------
 # PRICING & MARKDOWN  -  problem P2

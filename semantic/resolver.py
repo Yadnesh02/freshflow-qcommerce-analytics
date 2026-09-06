@@ -232,10 +232,19 @@ class Resolver:
     @staticmethod
     def _measure(metric: Metric) -> str:
         if metric.is_ratio:
-            # aggregate, then divide. The denominator arrives already guarded by
+            # Aggregate, then divide. The denominator arrives already guarded by
             # NULLIF in the registry, which test_ratio_denominator_guards_
             # division_by_zero enforces.
-            return f"{metric.numerator} / {metric.denominator}"
+            #
+            # **Both sides are parenthesised, and the absence of that shipped a
+            # wrong number to the live app.** `forecast_value_add` declares a
+            # numerator of `SUM(ABS(a - naive)) - SUM(ABS(a - forecast))`, and
+            # composing it unbracketed gives `A - B / C`, which SQL reads as
+            # `A - (B / C)` because division binds tighter than subtraction. The
+            # tile rendered 39,282,721.3% where the metric means about 0.2. A
+            # registry entry is data, so it cannot be trusted to be a single
+            # term; the composition has to hold whatever shape it is given.
+            return f"({metric.numerator}) / ({metric.denominator})"
         return metric.expression
 
     @staticmethod

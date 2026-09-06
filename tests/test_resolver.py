@@ -158,8 +158,13 @@ def test_ratios_divide_after_aggregating(metric, resolver) -> None:
     layer cannot pre-divide; this asserts the layer did not.
     """
     sql = resolver.compile(MetricRequest(metric.name)).sql
-    assert f"{metric.numerator} / {metric.denominator}" in sql, (
-        f"{metric.name} was not compiled as numerator / denominator"
+    # Bracketed on both sides since the forecast_value_add fix: a numerator with
+    # a top-level operator composes as `A - B / C` without them. The claim this
+    # test makes is unchanged - the halves are still divided only after each has
+    # aggregated - and test_a_compound_numerator_is_grouped_before_dividing
+    # covers the grouping itself.
+    assert f"({metric.numerator}) / ({metric.denominator})" in sql, (
+        f"{metric.name} was not compiled as (numerator) / (denominator)"
     )
     assert "avg(" not in sql.lower().replace(metric.numerator.lower(), ""), (
         f"{metric.name} averages something outside its own numerator"
@@ -300,3 +305,86 @@ def test_slicing_beyond_the_declared_grain_warns_rather_than_fails(resolver) -> 
 
 def _run(compiled):
     return compiled.sql, list(compiled.params)
+
+
+# ================================================== composition, not just shape
+def _has_top_level_operator(expression: str) -> bool:
+    """Whether an expression would change meaning if it were not bracketed.
+
+    Only operators outside every parenthesis matter: `SUM(a - b)` is one term
+    however it is composed, and `SUM(a) - SUM(b)` is two.
+    """
+    depth = 0
+    for char in expression:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char in "+-*" and depth == 0:
+            return True
+    return False
+
+
+COMPOUND_RATIOS = [
+    m
+    for m in METRICS
+    if m.is_ratio
+    and (_has_top_level_operator(m.numerator) or _has_top_level_operator(m.denominator))
+]
+
+
+def test_the_registry_still_contains_a_compound_ratio() -> None:
+    """Guards the two tests below, which would pass vacuously on an empty list.
+
+    If every numerator becomes a single term, these stop testing anything and
+    should be deleted rather than left green.
+    """
+    assert COMPOUND_RATIOS, (
+        "no metric declares a numerator or denominator with a top-level operator, so "
+        "the grouping tests below are asserting nothing"
+    )
+
+
+@pytest.mark.parametrize("metric", COMPOUND_RATIOS, ids=[m.name for m in COMPOUND_RATIOS])
+def test_a_compound_numerator_is_grouped_before_dividing(metric, resolver) -> None:
+    """`A - B / C` is not `(A - B) / C`, and SQL reads it the first way.
+
+    `forecast_value_add` declares `SUM(ABS(a - naive)) - SUM(ABS(a - forecast))`
+    over `NULLIF(SUM(a), 0)`. Composed unbracketed, division binds tighter than
+    subtraction, so the warehouse computed a difference of absolute unit counts
+    minus a small ratio - and the live tile read 39,282,721.3% where the metric
+    means about 0.18.
+
+    A registry entry is data. The composition has to hold whatever shape it is
+    handed, rather than assuming each side is a single term.
+    """
+    compiled = resolver.compile(MetricRequest(metric.name))
+    assert f"({metric.numerator}) / ({metric.denominator})" in compiled.sql, (
+        f"{metric.name} compiles to un-grouped division; with a top-level operator on "
+        f"either side that changes the arithmetic:\n  {compiled.sql}"
+    )
+
+
+def test_the_grouping_actually_changes_the_answer(con, tables) -> None:
+    """The companion that makes the test above non-vacuous.
+
+    Asserting that brackets appear in a string proves nothing about arithmetic.
+    This evaluates both spellings against the real table and requires them to
+    disagree - if they ever agree, the bracketing is no longer load-bearing and
+    the test above is decoration.
+    """
+    metric = next((m for m in COMPOUND_RATIOS if m.source in tables), None)
+    if metric is None:
+        pytest.skip("no compound ratio has its source table built here")
+
+    grouped = con.execute(
+        f"select ({metric.numerator}) / ({metric.denominator}) from marts.{metric.source}"
+    ).fetchone()[0]
+    ungrouped = con.execute(
+        f"select {metric.numerator} / {metric.denominator} from marts.{metric.source}"
+    ).fetchone()[0]
+
+    assert grouped != ungrouped, (
+        f"{metric.name} evaluates the same bracketed and unbracketed, so the grouping "
+        "test above is not testing anything on this data"
+    )

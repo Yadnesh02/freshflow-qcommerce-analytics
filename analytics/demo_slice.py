@@ -96,6 +96,10 @@ CLUSTER_BY = {
     "dim_customer": ("customer_id",),
     "rec_purchase_order": ("store_id", "sku_id", "date_day"),
     "fct_price_history": ("store_id", "sku_id", "effective_from_date"),
+    # class first: the three forecast metrics group by abc/xyz, and sorting
+    # the low-cardinality columns outermost is what lets a row group hold one
+    # class rather than a shuffle of all nine.
+    "mart_forecast_accuracy": ("abc_class", "xyz_class", "store_id", "sku_id", "date_day"),
 }
 
 # Columns dropped from the slice. Every one is build-time machinery, not
@@ -119,12 +123,21 @@ PRUNED = {
     "fct_order": ["arrival_date", "arrival_lag_days"],
     "fct_inventory_batch": ["arrival_date"],
     "dim_product_snapshot": ["dbt_scd_id"],
+    # the app reads actuals against forecast and naive, grouped by class.
+    # origin_date and horizon_days are the backtest's own bookkeeping and
+    # model_name is one repeated string; baseline_units is a third series
+    # no metric in the registry reads.
+    "mart_forecast_accuracy": ["origin_date", "horizon_days", "model_name", "baseline_units"],
 }
 
 # Left out on purpose, with the reason. See the module docstring.
 EXCLUDED = {
     "fct_inventory_movement": "audit ledger; its derived figures are already in the batch and daily marts",
     "fct_clickstream": "1.7M raw events behind the imputation; the app ships the fitted curve instead",
+    "mart_demand_forecast": (
+        "1.5M per-day predictions; no metric in the registry reads it, and the accuracy mart "
+        "that three metrics do read is shipped instead"
+    ),
 }
 
 
@@ -259,6 +272,16 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         # band across the whole estate, so a per-store slice of it is not the
         # coefficient anything was priced against
         "mart_price_elasticity": "select * from source.marts.mart_price_elasticity",
+        # The three forecast metrics read this, and without it the Demand &
+        # Availability page loses three of its four tiles and its WAPE chart.
+        # It was omitted silently rather than deliberately - it appeared neither
+        # here nor in EXCLUDED - and the deployed page raised a CatalogException
+        # in place of its content until 2026-09-06. Filtered by store and window
+        # like the other fact-shaped marts.
+        "mart_forecast_accuracy": (
+            f"select * from source.marts.mart_forecast_accuracy "
+            f"where store_id in ({store_list}) and {window}"
+        ),
         "fct_order": (
             f"select * from source.marts.fct_order where store_id in ({store_list}) and {window}"
         ),

@@ -240,8 +240,26 @@ def _clamp(limit: int | None) -> int:
     return max(1, min(limit, MAX_ROWS))
 
 
-def _serve(sql: str, params: list[Any]) -> tuple[list[dict], bool, float]:
-    """Run it, or return the cached answer. Returns (rows, was_cached, ms)."""
+def _serve(
+    sql: str, params: list[Any], missing_hint: str | None = None
+) -> tuple[list[dict], bool, float]:
+    """Run it, or return the cached answer. Returns (rows, was_cached, ms).
+
+    **A missing source table is turned into a 503 here rather than at each call
+    site, because in this application an unhandled exception does not become a
+    500 - it becomes a traceback on the page.** The dashboard talks to FastAPI
+    in-process over ASGI (ADR-004), so there is no network boundary to convert
+    a server fault into a response: `duckdb.CatalogException` propagates out of
+    the endpoint, through the transport, and up into the Streamlit script, which
+    renders it in place of the page. That is what happened to Demand &
+    Availability on the deployed build, where `forecast_wape` reads a mart the
+    published slice does not carry.
+
+    Two endpoints had their own `except duckdb.CatalogException` and two did
+    not, which is exactly the shape of a rule kept by convention. Doing it here
+    means a new endpoint cannot forget, and `missing_hint` keeps what the
+    per-endpoint handlers were worth: the command that builds the missing table.
+    """
     key = (sql, tuple(params))
     started = time.perf_counter()
 
@@ -249,7 +267,16 @@ def _serve(sql: str, params: list[Any]) -> tuple[list[dict], bool, float]:
     if hit:
         return cached_rows, True, (time.perf_counter() - started) * 1000
 
-    rows = warehouse.query(sql, params)
+    try:
+        rows = warehouse.query(sql, params)
+    except duckdb.CatalogException as exc:
+        # The driver names the missing relation; pass it through rather than
+        # paraphrasing, and add the build command when the caller supplied one.
+        detail = str(exc).splitlines()[0]
+        if missing_hint:
+            detail = f"{detail} - {missing_hint}"
+        raise HTTPException(status_code=503, detail=detail) from exc
+
     warehouse.cache.put(key, rows)
     return rows, False, (time.perf_counter() - started) * 1000
 
@@ -312,7 +339,11 @@ def get_metric(
             limit=_clamp(limit) if requested else None,
         )
     )
-    rows, cached, elapsed = _serve(compiled.sql, list(compiled.params))
+    rows, cached, elapsed = _serve(
+        compiled.sql,
+        list(compiled.params),
+        missing_hint=(f"`{name}` reads {compiled.metric.source}, which this build does not carry"),
+    )
     return MetricResponse(
         data=rows,
         meta=ResponseMeta(
@@ -357,13 +388,7 @@ def expiry_queue(
         "order by value_at_risk_inr desc\n"
         f"limit {_clamp(limit)}"
     )
-    try:
-        rows, cached, elapsed = _serve(sql, params)
-    except duckdb.CatalogException as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="mart_expiry_risk is not built - run `python tasks.py expiry-risk`",
-        ) from exc
+    rows, cached, elapsed = _serve(sql, params, missing_hint="run `python tasks.py expiry-risk`")
 
     return ExpiryQueueResponse(
         data=[ExpiryAction(**row) for row in rows],
@@ -422,13 +447,7 @@ def elasticity(
         f"{where}"
         "order by est.l1_category, bands.sort_order"
     )
-    try:
-        rows, cached, elapsed = _serve(sql, params)
-    except duckdb.CatalogException as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="mart_price_elasticity is not built - run `python tasks.py elasticity`",
-        ) from exc
+    rows, cached, elapsed = _serve(sql, params, missing_hint="run `python tasks.py elasticity`")
 
     unidentified = sum(1 for row in rows if not row["is_identified"])
     warnings = []
@@ -622,16 +641,11 @@ def experiment() -> ExperimentResponse:
         "       display_policy_a, display_policy_b, display_delta, display_unit\n"
         "from marts.mart_experiment_readout"
     )
-    try:
-        rows, cached, elapsed = _serve(sql, [])
-    except duckdb.CatalogException as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "mart_experiment_readout is not built - run `python tasks.py experiment` "
-                "then `python tasks.py build`"
-            ),
-        ) from exc
+    rows, cached, elapsed = _serve(
+        sql,
+        [],
+        missing_hint="run `python tasks.py experiment` then `python tasks.py build`",
+    )
 
     unmeasured = [r["metric"] for r in rows if not r["is_measured"]]
     warnings = []
@@ -673,7 +687,9 @@ def freshness() -> FreshnessResponse:
         "group by source_name\n"
         "order by is_stale desc, days_behind desc"
     )
-    rows, cached, elapsed = _serve(sql, [])
+    rows, cached, elapsed = _serve(
+        sql, [], missing_hint="dq_source_coverage is built by `python tasks.py build`"
+    )
     sources = [SourceFreshness(**row) for row in rows]
     return FreshnessResponse(
         as_of=max((s.last_seen_date for s in sources if s.last_seen_date), default=None),
