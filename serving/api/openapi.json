@@ -21,6 +21,55 @@
         "title": "ActionQueueResponse",
         "type": "object"
       },
+      "DefectRecord": {
+        "description": "One deliberately injected defect, and what staging does about it.\n\nServed next to the scan because a warning without its cause reads as an\nunexplained amber light. The clickstream outage warns on every healthy\nbuild; the ledger is what turns that from a nag into a known quantity.",
+        "properties": {
+          "feeds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feeds",
+            "type": "array"
+          },
+          "fix": {
+            "title": "Fix",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "symptom": {
+            "title": "Symptom",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "symptom",
+          "fix",
+          "rows",
+          "feeds"
+        ],
+        "title": "DefectRecord",
+        "type": "object"
+      },
       "ElasticityCell": {
         "description": "One category x freshness band, and whether it means anything.\n\n`elasticity_usable` is null wherever S4.1 could not establish a downward\nslope. That is the field a consumer should read: `elasticity_raw` is what\nthe fit returned, including the cells whose interval covers zero and the\ntwo thin ones that came back at +8.60 and +1.61. Publishing only the raw\nnumber would invite exactly the misreading the estimator exists to prevent.",
         "properties": {
@@ -592,6 +641,60 @@
         "title": "MetricResponse",
         "type": "object"
       },
+      "QualityResponse": {
+        "description": "The scan verdict and the defect ledger, either of which may be absent.\n\nBoth are files rather than tables, so a deployed instance can legitimately\nhave neither. They come back empty with a reason in `unavailable` instead\nof 404 - a Data Quality page that cannot render is a worse answer to \"is\nthe data good\" than a page that says which half it cannot see.",
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/SodaCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "defects": {
+            "items": {
+              "$ref": "#/components/schemas/DefectRecord"
+            },
+            "title": "Defects",
+            "type": "array"
+          },
+          "has_failures": {
+            "title": "Has Failures",
+            "type": "boolean"
+          },
+          "has_warnings": {
+            "title": "Has Warnings",
+            "type": "boolean"
+          },
+          "scanned_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scanned At"
+          },
+          "unavailable": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unavailable",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scanned_at",
+          "has_failures",
+          "has_warnings",
+          "checks",
+          "defects"
+        ],
+        "title": "QualityResponse",
+        "type": "object"
+      },
       "RecommendedAction": {
         "description": "One thing to do today, from any of the four decision engines.",
         "properties": {
@@ -720,6 +823,49 @@
           "elapsed_ms"
         ],
         "title": "ResponseMeta",
+        "type": "object"
+      },
+      "SodaCheck": {
+        "description": "One check from the last Soda scan.\n\n`outcome` is Soda's own word - pass, warn or fail - rather than a boolean,\nbecause the three are not two. A warn is a thing to look at and a fail is a\nthing to stop for, and collapsing them would lose the distinction the\nchecks file exists to make.",
+        "properties": {
+          "failed_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Rows"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          }
+        },
+        "required": [
+          "name",
+          "outcome",
+          "table",
+          "failed_rows"
+        ],
+        "title": "SodaCheck",
         "type": "object"
       },
       "SourceFreshness": {
@@ -1086,6 +1232,25 @@
           }
         },
         "summary": "Source freshness SLA"
+      }
+    },
+    "/health/quality": {
+      "get": {
+        "description": "The last Soda scan, and the defects the warehouse was built to repair.\n\nBoth inputs are files rather than tables - Soda runs outside this process\nentirely, for the dependency reasons in quality/soda/configuration.yml -\nso either can be missing without anything being wrong. A deployed instance\nthat fetched only the demo slice has neither, and says so in `unavailable`\nrather than returning a 404 that the page would have to translate.\n\nThe two travel together because a warning without its cause is an\nunexplained amber light. The clickstream outage warns on every healthy\nbuild, and the ledger is what makes that a known quantity instead of a nag\nsomebody eventually silences.",
+        "operationId": "quality_health_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The data-quality scan"
       }
     },
     "/metrics": {

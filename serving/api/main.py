@@ -28,6 +28,7 @@ request takes a cursor under a lock.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import threading
 import time
@@ -53,6 +54,7 @@ from semantic.resolver import (
 from serving.api.cache import TTLCache
 from serving.api.schemas import (
     ActionQueueResponse,
+    DefectRecord,
     ElasticityCell,
     ElasticityResponse,
     ErrorResponse,
@@ -63,8 +65,10 @@ from serving.api.schemas import (
     FreshnessResponse,
     MetricDefinition,
     MetricResponse,
+    QualityResponse,
     RecommendedAction,
     ResponseMeta,
+    SodaCheck,
     SourceFreshness,
 )
 
@@ -683,6 +687,100 @@ def freshness() -> FreshnessResponse:
             generated_at=_now(),
             elapsed_ms=round(elapsed, 2),
         ),
+    )
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCAN_RESULTS = ROOT / "reports" / "soda_scan.json"
+DEFECT_LEDGER = ROOT / "data" / "_manifest" / "dirt.json"
+
+
+def _read_json(path: Path) -> Any | None:
+    """None on anything unreadable. A quality endpoint must not fail closed."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _failed_rows(check: dict[str, Any]) -> int | None:
+    """How many rows a `failed rows` check matched, from Soda's diagnostics.
+
+    **Only for that kind of check.** A threshold check like `row_count > 0`
+    also carries a number - its `value` - and that number is the healthy row
+    count, not a count of failures. Reading it here would have put 3,984 in a
+    column headed "failed rows" on a check that passed. None is the honest
+    answer for a check that does not produce failing rows.
+    """
+    for block in (check.get("diagnostics") or {}).get("blocks") or []:
+        file_block = block.get("file") or {}
+        if "totalRowCount" in file_block:
+            return int(file_block["totalRowCount"])
+    return None
+
+
+@app.get("/health/quality", response_model=QualityResponse, summary="The data-quality scan")
+def quality() -> QualityResponse:
+    """The last Soda scan, and the defects the warehouse was built to repair.
+
+    Both inputs are files rather than tables - Soda runs outside this process
+    entirely, for the dependency reasons in quality/soda/configuration.yml -
+    so either can be missing without anything being wrong. A deployed instance
+    that fetched only the demo slice has neither, and says so in `unavailable`
+    rather than returning a 404 that the page would have to translate.
+
+    The two travel together because a warning without its cause is an
+    unexplained amber light. The clickstream outage warns on every healthy
+    build, and the ledger is what makes that a known quantity instead of a nag
+    somebody eventually silences.
+    """
+    unavailable: list[str] = []
+
+    scan = _read_json(SCAN_RESULTS)
+    if scan is None:
+        unavailable.append(
+            "No scan result at reports/soda_scan.json - run `python tasks.py soda`. "
+            "Soda runs in its own environment and writes this file; it is not a table."
+        )
+        checks: list[SodaCheck] = []
+    else:
+        checks = [
+            SodaCheck(
+                name=c.get("name") or c.get("definition", "")[:80],
+                outcome=c.get("outcome", "unknown"),
+                table=c.get("table"),
+                failed_rows=_failed_rows(c),
+            )
+            for c in scan.get("checks", [])
+        ]
+
+    ledger = _read_json(DEFECT_LEDGER)
+    if ledger is None:
+        unavailable.append(
+            "No defect ledger at data/_manifest/dirt.json - it is written by "
+            "`python tasks.py simulate` and is not carried by the demo slice."
+        )
+        defects: list[DefectRecord] = []
+    else:
+        defects = [
+            DefectRecord(
+                key=d["key"],
+                title=d["title"],
+                symptom=d["symptom"],
+                fix=d["fix"],
+                rows=d.get("rows"),
+                feeds=list(d.get("feeds") or []),
+            )
+            for d in ledger
+        ]
+
+    return QualityResponse(
+        scanned_at=(scan or {}).get("scanStartTimestamp"),
+        has_failures=bool((scan or {}).get("hasFailures")),
+        has_warnings=bool((scan or {}).get("hasWarnings")),
+        checks=checks,
+        defects=defects,
+        unavailable=unavailable,
     )
 
 

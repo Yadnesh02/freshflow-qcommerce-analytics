@@ -1,0 +1,64 @@
+# Source freshness and coverage, as an operational SLA (task S5.7).
+#
+# **Why this exists next to dbt tests rather than instead of them.** A dbt test
+# asserts a relationship that must hold for the build to be correct, and it runs
+# inside the build. These assert that the warehouse still meets an operational
+# promise, and they run against the artefact after it is built - including the
+# published demo, which no dbt invocation ever touches again. The two answer
+# different questions: "did this transformation do what it claims" and "is what
+# we are serving still fit to serve".
+#
+# **There is no wall-clock freshness check here, on purpose.** The conventional
+# spelling is `freshness(date_day) < 2d`, which compares the newest row to
+# `now()`. This warehouse simulates a year that ends on a fixed date, so that
+# check starts failing the day after the world is generated and fails harder
+# every day after - a red scan that means nothing except that time passed.
+# Staleness has to be measured against the world's own last day, which is what
+# `is_stale` in dq_source_coverage does: a feed is stale when it stopped
+# arriving before the other feeds did. That is the real failure mode anyway - a
+# source that goes quiet is invisible to every gap check and to every average.
+
+checks for marts.dq_source_coverage:
+
+  # ---------------------------------------------------------------- the gate
+  # A feed that stopped arriving. Hard failure: this is the one that fails
+  # silently downstream, because the rows are simply absent and every average
+  # over the window quietly divides by a smaller denominator.
+  #
+  # tests/test_soda.py::test_injected_staleness_fails_the_freshness_check holds
+  # a warehouse with a truncated feed against this check and requires it to go
+  # red. A freshness check that has never been seen to fail is a claim, not a
+  # gate.
+  - failed rows:
+      name: No source feed has stopped arriving
+      fail query: |
+        select distinct
+            source_name,
+            cast(last_seen_date as varchar) as last_seen_date
+        from marts.dq_source_coverage
+        where is_stale
+
+  # -------------------------------------------------------------- the warning
+  # A hole inside a feed's own active life. This warns rather than fails, and
+  # the reason is in dq_source_coverage's own docstring: the clickstream lost
+  # two partitions to a documented outage that is deliberately not backfilled,
+  # so a hard failure here would be red on every healthy build and would teach
+  # everyone to stop reading the scan. The count is not written down here -
+  # a number in a check file is correct for exactly one build - it is read from
+  # the defect ledger and rendered next to the warning on the Data Quality page.
+  - failed rows:
+      name: Daily feeds have every partition inside their active life
+      warn: when > 0
+      fail: when > 1000
+      fail query: |
+        select
+            source_name,
+            cast(date_day as varchar) as date_day
+        from marts.dq_source_coverage
+        where is_missing_partition
+
+  # The table itself has to be non-empty, or both checks above pass by having
+  # nothing to look at. This is the cheapest possible guard against the failure
+  # mode this whole file exists to prevent.
+  - row_count > 0:
+      name: Coverage is actually being measured

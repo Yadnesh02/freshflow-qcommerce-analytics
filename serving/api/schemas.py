@@ -158,6 +158,54 @@ class FreshnessResponse(BaseModel):
     meta: ResponseMeta
 
 
+class SodaCheck(BaseModel):
+    """One check from the last Soda scan.
+
+    `outcome` is Soda's own word - pass, warn or fail - rather than a boolean,
+    because the three are not two. A warn is a thing to look at and a fail is a
+    thing to stop for, and collapsing them would lose the distinction the
+    checks file exists to make.
+    """
+
+    name: str
+    outcome: str
+    table: str | None
+    failed_rows: int | None
+
+
+class DefectRecord(BaseModel):
+    """One deliberately injected defect, and what staging does about it.
+
+    Served next to the scan because a warning without its cause reads as an
+    unexplained amber light. The clickstream outage warns on every healthy
+    build; the ledger is what turns that from a nag into a known quantity.
+    """
+
+    key: str
+    title: str
+    symptom: str
+    fix: str
+    rows: int | None
+    feeds: list[str]
+
+
+class QualityResponse(BaseModel):
+    """The scan verdict and the defect ledger, either of which may be absent.
+
+    Both are files rather than tables, so a deployed instance can legitimately
+    have neither. They come back empty with a reason in `unavailable` instead
+    of 404 - a Data Quality page that cannot render is a worse answer to "is
+    the data good" than a page that says which half it cannot see.
+    """
+
+    scanned_at: str | None
+    has_failures: bool
+    has_warnings: bool
+    checks: list[SodaCheck]
+    defects: list[DefectRecord]
+    unavailable: list[str] = Field(default_factory=list)
+
+
 class ErrorResponse(BaseModel):
     """A refusal, with the reason and what would have worked instead.
 

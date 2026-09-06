@@ -184,6 +184,24 @@ jobs:
       # asserts each injected defect was repaired by the amount dirt.json says
       # was injected, which dbt's own tests cannot check because they only see
       # the output.
+      # The operational half of data quality, and it is a gate. dbt's tests ran
+      # inside the build above and assert that the transformation is correct;
+      # this asserts that the artefact is fit to serve, which is a different
+      # question and the only one that still applies to the published demo.
+      #
+      # Blocking on a FAILURE and not on a warning - `quality/scan.py` maps
+      # Soda's exit codes onto that distinction. The clickstream outage warns on
+      # every healthy build, and a step that went red for it would be switched
+      # off within a week. A feed that stopped arriving stops the build.
+      #
+      # Soda is not in the lockfile and must not be: it caps protobuf below what
+      # dbt-core 1.11 needs, so installing it would downgrade the transformation
+      # layer to accommodate the checker. It runs in its own `uv` environment.
+      - name: Data-quality scan
+        run: |
+          mkdir -p reports
+          uv run python tasks.py soda | tee reports/soda.txt
+
       - name: Warehouse contract tests
         run: uv run pytest -m needs_warehouse
 

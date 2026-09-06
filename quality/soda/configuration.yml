@@ -1,0 +1,23 @@
+# Soda's connection to the warehouse (task S5.7).
+#
+# **Soda is not a project dependency and must not become one.** Adding
+# `soda-core-duckdb` to pyproject.toml resolves, and the resolution is a trap:
+# soda-core 3.3.x caps protobuf below 5, dbt-core 1.11 requires protobuf 6, and
+# the only way a resolver satisfies both is to drag dbt-core down to 1.8.8 or
+# forward to a 2.0 release candidate. The warehouse this scans is built by dbt
+# 1.11 with dagster-dbt 0.29. Trading the transformation layer's version for a
+# checker that runs after it is the wrong way round.
+#
+# So `quality/scan.py` runs Soda in its own throwaway environment and speaks to
+# it over the file, not the import. The two never share an interpreter, which
+# also means Soda's own duckdb (1.0.0, pinned by soda-core 3.5.6) never has to
+# agree with the one that wrote the file. It does read it - verified, not
+# assumed - because DuckDB's storage format has been stable across 1.x.
+#
+# The path comes from the environment so one set of checks covers every build:
+# the full dev warehouse, CI's 30-day slice, and the five-store demo.
+
+data_source freshflow:
+  type: duckdb
+  path: ${FRESHFLOW_WAREHOUSE}
+  read_only: true

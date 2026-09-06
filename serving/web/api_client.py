@@ -195,6 +195,16 @@ class MetricsClient:
     def freshness(self) -> ApiResult:
         return self._get("/health/freshness")
 
+    def quality(self) -> ApiResult:
+        """The last Soda scan and the defect ledger.
+
+        Either half can be legitimately absent - both are files written outside
+        the API's process - so this returns `ok` with an `unavailable` list
+        rather than failing. The page renders what it has and says what it
+        cannot see.
+        """
+        return self._get("/health/quality")
+
     def catalogue(self) -> ApiResult:
         return self._get("/metrics")
 

@@ -60,6 +60,13 @@ scratch/
 notebooks/scratch/
 *.log
 
+# Build outputs, not results. `warehouse.yml` writes the anchors, the published
+# figures, the delivery-cost crossover and the Soda scan here and uploads the
+# directory as part of the warehouse-build artifact - which is the point of
+# them: they are read from a run, not from the repository. A committed copy
+# would be a snapshot of whichever build last ran on somebody's laptop.
+reports/
+
 # The experiment readout is committed on purpose, and this exception sits last
 # because the last matching rule wins: it has to come after both `data/*` and
 # the blanket `*.parquet` above, either of which would otherwise re-exclude it.
