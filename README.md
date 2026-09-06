@@ -152,14 +152,14 @@ independent seeds — measures this by difference-in-differences:
 
 | Metric | Policy A | Policy B | Difference-in-differences | 95% CI |
 |---|---|---|---|---|
-| **Gross margin after wastage** — *the north star* | 22.21% | 20.74% | **−1.37pp** | [−1.65, −1.09] |
-| Availability | 79.10% | 81.94% | **+2.92pp** | [+2.74, +3.10] |
-| Wastage rate on revenue | 1.90% | 3.78% | **+1.83pp** | [+1.61, +2.05] |
-| Markdown subsidy per store-day | ₹1,258.52 | ₹326.77 | **−₹1,042.91** | [−1,237, −849] |
+| **Gross margin after wastage** — *the north star* | 22.22% | 20.76% | **−1.35pp** | [−1.62, −1.08] |
+| Availability | 79.14% | 82.00% | **+2.94pp** | [+2.77, +3.11] |
+| Wastage rate on revenue | 1.90% | 3.74% | **+1.80pp** | [+1.59, +2.01] |
+| Markdown subsidy per store-day | ₹1,255.27 | ₹325.46 | **−₹1,040.97** | [−1,229, −852] |
 
 Every row is significant across all 30 seeds. Policy B buys **+2.9pp of availability and roughly
 doubles write-offs**, and on gross margin after wastage — the rate the metric registry named as the
-north star *before* any of this ran — it is **1.37pp worse**. Component attribution puts essentially
+north star *before* any of this ran — it is **1.35pp worse**. Component attribution puts essentially
 all of that on the newsvendor, which trades wastage for availability by design; markdown restraint
 is the largest positive contributor.
 

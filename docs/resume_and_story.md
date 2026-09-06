@@ -13,7 +13,7 @@ Pick three or four. They are ordered by how well they survive being interrogated
 
 > **Built a closed-loop policy backtest for a simulated 14-store q-commerce network and measured a
 > proposed replenishment-and-markdown policy against the status quo across 30 seeded worlds — the
-> policy raised availability 2.9pp but doubled write-offs, coming out 1.37pp worse on gross margin
+> policy raised availability 2.9pp but doubled write-offs, coming out 1.35pp worse on gross margin
 > after wastage, the metric declared before the experiment ran.**
 
 > **Designed a YAML metric registry and SQL resolver that the API, dashboard, generated dictionary
@@ -70,7 +70,7 @@ per-component attribution.
 
 **What it found (15s).** The optimised policy **lost**. It bought 2.9 points of availability by
 roughly doubling wastage, and on gross margin after wastage — the metric I declared in the registry
-before running anything — it came out 1.37 points worse, consistently across all thirty seeds. The
+before running anything — it came out 1.35 points worse, consistently across all thirty seeds. The
 attribution puts essentially all of it on the newsvendor. The markdown engine came out ahead
 precisely by recommending almost nothing, because every fitted elasticity is inside the unit
 interval.

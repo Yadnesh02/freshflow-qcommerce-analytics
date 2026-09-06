@@ -57,7 +57,7 @@ SQL sit on screen for three full seconds.
 >
 > And the optimised policy **lost**. It bought 2.9 points of availability by roughly doubling
 > write-offs. On gross margin after wastage — the metric I declared in the registry before any of
-> this ran — it came out 1.37 points worse, consistently across all thirty seeds.
+> this ran — it came out 1.35 points worse, consistently across all thirty seeds.
 >
 > A margin figure in rupees would have shown a win, because the policy sells more. Declaring a rate
 > net of wastage up front is what stopped me reporting one. Component attribution puts essentially

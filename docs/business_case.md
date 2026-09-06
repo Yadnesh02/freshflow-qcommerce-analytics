@@ -41,15 +41,15 @@ discipline: it is what stops a result being re-framed once it is known.
 
 | | Status quo | Policy B | Difference | 95% interval |
 |---|---|---|---|---|
-| **Gross margin after wastage** — *north star* | 22.21% | 20.74% | **−1.37pp** | [−1.65, −1.09] |
-| Availability | 79.10% | 81.94% | **+2.92pp** | [+2.74, +3.10] |
-| Wastage, as a share of revenue | 1.90% | 3.78% | **+1.83pp** | [+1.61, +2.05] |
-| Markdown subsidy per store-day | ₹1,258.52 | ₹326.77 | **−₹1,042.91** | [−1,237, −849] |
+| **Gross margin after wastage** — *north star* | 22.22% | 20.76% | **−1.35pp** | [−1.62, −1.08] |
+| Availability | 79.14% | 82.00% | **+2.94pp** | [+2.77, +3.11] |
+| Wastage, as a share of revenue | 1.90% | 3.74% | **+1.80pp** | [+1.59, +2.01] |
+| Markdown subsidy per store-day | ₹1,255.27 | ₹325.46 | **−₹1,040.97** | [−1,229, −852] |
 
 Every row is significant across all thirty seeds.
 
 Read plainly: **Policy B buys 2.9 points of availability by roughly doubling what we throw away.**
-On the rate that nets wastage off margin, it is 1.37 points worse than doing nothing.
+On the rate that nets wastage off margin, it is 1.35 points worse than doing nothing.
 
 Component attribution puts **essentially all of the damage on the newsvendor** — it trades wastage
 for availability by design, and at this shelf-life profile the trade is not worth making. The
@@ -92,7 +92,7 @@ Three things, in the order we would do them:
    before-and-after on the current data reports lifts above 500%; the fitted coefficient for the
    same cells is around −0.36 and fails identification in most of them. The gap between those two
    numbers is the entire case for running the test.
-3. **Price the availability we are buying.** −1.37pp of margin for +2.9pp of availability is only a
+3. **Price the availability we are buying.** −1.35pp of margin for +2.9pp of availability is only a
    bad trade if a point of availability is worth less than half a point of margin. We do not know
    what it is worth, because that is a retention question and this design randomises stores rather
    than customers. Until someone puts a number on it, the north star is the right arbiter.
