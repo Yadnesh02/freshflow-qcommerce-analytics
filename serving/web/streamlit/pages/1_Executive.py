@@ -167,4 +167,64 @@ st.info(
     icon=":material/balance:",
 )
 
+# ------------------------------------------------------ did the new policy work
+st.subheader("Did the optimised policy work?")
+st.caption(
+    "Thirty simulated worlds, 180 days each, half the stores switched on day 46 and the rest "
+    "left alone. Difference-in-differences against the holdout, 95% interval over seeds."
+)
+
+readout = client.experiment()
+if not guard(readout, "the experiment readout"):
+    st.caption("_Run `python tasks.py experiment`, then rebuild._")
+else:
+    table = frame(readout)
+    measured = table[table["is_measured"]] if not table.empty else table
+
+    if not measured.empty:
+        north = measured[measured["metric"] == "gm_awm_pct"]
+        if not north.empty:
+            row = north.iloc[0]
+            # The headline, stated as the direction it actually goes. An earlier
+            # draft of this project reported "+6.4% margin" from revenue minus
+            # cogs as a rupee level - which rises because Policy B sells more -
+            # and the north star is a rate net of wastage, on which it falls.
+            # The registry names one metric for exactly this reason.
+            st.error(
+                f"**On the north star, the optimised policy is worse: "
+                f"{row['display_delta']:+.2f}pp.** It lifts availability and gross margin and "
+                f"roughly doubles wastage, so gross margin *after* wastage falls from "
+                f"{row['display_policy_a']:.2f}% to {row['display_policy_b']:.2f}%. "
+                "The recommendation is to re-tune the newsvendor's service level: the ablation "
+                "attributes essentially all of the extra wastage to it.",
+                icon=":material/trending_down:",
+            )
+
+        display = measured[
+            ["metric", "display_policy_a", "display_policy_b", "display_delta", "display_unit"]
+        ]
+        st.dataframe(
+            display.rename(
+                columns={
+                    "metric": "metric",
+                    "display_policy_a": "Policy A (holdout)",
+                    "display_policy_b": "Policy B (treated)",
+                    "display_delta": "difference-in-differences",
+                    "display_unit": "unit",
+                }
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.caption(
+            "The difference is **not** Policy B minus Policy A: it removes the pre-period gap "
+            "between the two groups and anything that hit both on the same day."
+        )
+
+    unmeasured = table[~table["is_measured"]] if not table.empty else table
+    for row in unmeasured.itertuples():
+        st.caption(f"_{row.metric} is not measurable here: {row.not_applicable_reason}_")
+
+    show_query(readout, "experiment")
+
 api_footer(None)

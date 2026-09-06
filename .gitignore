@@ -1,5 +1,13 @@
 # ---- data (regenerate with `python tasks.py simulate`) ----
-data/
+# `data/*` rather than `data/`, because git cannot re-include a file whose
+# parent directory is excluded - an exception under a bare `data/` is silently
+# ignored, which is how the first attempt at this failed.
+data/*
+# ...except the experiment readout, committed on purpose. S5.5's gate is that
+# `mart_experiment_readout` rebuilds from committed results on any clone, and a
+# table the reader must regenerate before they can see it is not a published
+# result. Six rows and a few KB. The raw panels stay as CI artifacts: those are
+# megabytes, and git history only grows.
 *.duckdb
 *.duckdb.wal
 *.parquet
@@ -51,3 +59,14 @@ desktop.ini
 scratch/
 notebooks/scratch/
 *.log
+
+# The experiment readout is committed on purpose, and this exception sits last
+# because the last matching rule wins: it has to come after both `data/*` and
+# the blanket `*.parquet` above, either of which would otherwise re-exclude it.
+#
+# S5.5's gate is that `mart_experiment_readout` rebuilds from committed results
+# on any clone, and a table the reader must regenerate before they can see it is
+# not a published result. Six rows, a few KB. The raw panels stay as CI
+# artifacts: megabytes each, and git history only grows.
+!data/experiment/
+!data/experiment/readout.parquet

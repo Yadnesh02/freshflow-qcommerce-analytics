@@ -169,3 +169,42 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str
     available: list[str] = Field(default_factory=list)
+
+
+class ExperimentRow(BaseModel):
+    """One metric from the policy backtest readout.
+
+    `delta` is a difference-in-differences and is NOT `policy_b - policy_a`: it
+    removes the pre-period gap between the two groups and anything that hit both
+    arms on the same day. A consumer that subtracts the two columns will get a
+    different, wrong number, which is why the delta is served rather than left
+    to be derived.
+
+    `not_applicable_reason` is set on rows the holdout cannot answer, and those
+    rows carry nulls rather than zeros. A zero would render as a measured result
+    of no effect, which is the opposite of what is meant.
+    """
+
+    metric: str
+    unit: str
+    policy_a: float | None
+    policy_b: float | None
+    delta: float | None
+    ci_low: float | None
+    ci_high: float | None
+    significant: bool | None
+    seeds: int | None
+    is_measured: bool
+    not_applicable_reason: str | None
+    display_policy_a: float | None
+    display_policy_b: float | None
+    display_delta: float | None
+    display_unit: str
+
+
+class ExperimentResponse(BaseModel):
+    """The readout table, ordered north star first."""
+
+    data: list[ExperimentRow]
+    meta: ResponseMeta
+    warnings: list[str] = []

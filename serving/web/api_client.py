@@ -168,6 +168,16 @@ class MetricsClient:
             params["identified_only"] = True
         return self._get("/elasticity", params)
 
+    def experiment(self) -> ApiResult:
+        """The policy A/B readout, north star first.
+
+        Rows the holdout cannot answer come back with nulls and a stated
+        reason rather than being omitted, so the page can render them as
+        blanks with an explanation instead of silently showing a shorter
+        table than the plan asked for.
+        """
+        return self._get("/experiment")
+
     def action_queue(
         self,
         store: str | None = None,

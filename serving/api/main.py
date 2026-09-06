@@ -56,6 +56,8 @@ from serving.api.schemas import (
     ElasticityCell,
     ElasticityResponse,
     ErrorResponse,
+    ExperimentResponse,
+    ExperimentRow,
     ExpiryAction,
     ExpiryQueueResponse,
     FreshnessResponse,
@@ -586,6 +588,65 @@ def action_queue(
             elapsed_ms=round(elapsed, 2),
             warnings=missing,
         ),
+    )
+
+
+@app.get(
+    "/experiment",
+    response_model=ExperimentResponse,
+    summary="The policy A/B readout",
+)
+def experiment() -> ExperimentResponse:
+    """What the backtest concluded, including the rows it could not conclude.
+
+    The north star comes first, and it is the one that matters: Policy B raises
+    availability and gross margin and roughly doubles wastage, so on gross
+    margin after wastage it is worse than the status quo. A readout carrying
+    only the margin level would have reported a win - the level rises because
+    Policy B sells more - which is precisely why the registry names a rate as
+    the north star and why this table serves it first.
+
+    Rows the holdout cannot answer are returned with nulls and a reason rather
+    than omitted. Ninety-day retention is customer-level while the holdout
+    randomises stores; forecast WAPE is a property of Policy B's forecast, and
+    Policy A does not forecast. Dropping them would read as an oversight and
+    filling them would be invention.
+    """
+    sql = (
+        "select metric, unit, policy_a, policy_b, delta, ci_low, ci_high,\n"
+        "       significant, seeds, is_measured, not_applicable_reason,\n"
+        "       display_policy_a, display_policy_b, display_delta, display_unit\n"
+        "from marts.mart_experiment_readout"
+    )
+    try:
+        rows, cached, elapsed = _serve(sql, [])
+    except duckdb.CatalogException as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "mart_experiment_readout is not built - run `python tasks.py experiment` "
+                "then `python tasks.py build`"
+            ),
+        ) from exc
+
+    unmeasured = [r["metric"] for r in rows if not r["is_measured"]]
+    warnings = []
+    if unmeasured:
+        warnings.append(
+            f"{len(unmeasured)} of {len(rows)} rows are not measurable from this design "
+            f"({', '.join(unmeasured)}); each carries the reason rather than a number"
+        )
+    return ExperimentResponse(
+        data=[ExperimentRow(**row) for row in rows],
+        meta=ResponseMeta(
+            sql=sql,
+            params=[],
+            rows=len(rows),
+            cached=cached,
+            elapsed_ms=elapsed,
+            generated_at=_now(),
+        ),
+        warnings=warnings,
     )
 
 

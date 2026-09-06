@@ -112,6 +112,196 @@
         "title": "ElasticityResponse",
         "type": "object"
       },
+      "ExperimentResponse": {
+        "description": "The readout table, ordered north star first.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ExperimentResponse",
+        "type": "object"
+      },
+      "ExperimentRow": {
+        "description": "One metric from the policy backtest readout.\n\n`delta` is a difference-in-differences and is NOT `policy_b - policy_a`: it\nremoves the pre-period gap between the two groups and anything that hit both\narms on the same day. A consumer that subtracts the two columns will get a\ndifferent, wrong number, which is why the delta is served rather than left\nto be derived.\n\n`not_applicable_reason` is set on rows the holdout cannot answer, and those\nrows carry nulls rather than zeros. A zero would render as a measured result\nof no effect, which is the opposite of what is meant.",
+        "properties": {
+          "ci_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci High"
+          },
+          "ci_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Low"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "display_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Delta"
+          },
+          "display_policy_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Policy A"
+          },
+          "display_policy_b": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Policy B"
+          },
+          "display_unit": {
+            "title": "Display Unit",
+            "type": "string"
+          },
+          "is_measured": {
+            "title": "Is Measured",
+            "type": "boolean"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "not_applicable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Applicable Reason"
+          },
+          "policy_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy A"
+          },
+          "policy_b": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy B"
+          },
+          "seeds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seeds"
+          },
+          "significant": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Significant"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric",
+          "unit",
+          "policy_a",
+          "policy_b",
+          "delta",
+          "ci_low",
+          "ci_high",
+          "significant",
+          "seeds",
+          "is_measured",
+          "not_applicable_reason",
+          "display_policy_a",
+          "display_policy_b",
+          "display_delta",
+          "display_unit"
+        ],
+        "title": "ExperimentRow",
+        "type": "object"
+      },
       "ExpiryAction": {
         "description": "One row of the ranked action queue.",
         "properties": {
@@ -838,6 +1028,25 @@
           }
         },
         "summary": "Price response by category and freshness"
+      }
+    },
+    "/experiment": {
+      "get": {
+        "description": "What the backtest concluded, including the rows it could not conclude.\n\nThe north star comes first, and it is the one that matters: Policy B raises\navailability and gross margin and roughly doubles wastage, so on gross\nmargin after wastage it is worse than the status quo. A readout carrying\nonly the margin level would have reported a win - the level rises because\nPolicy B sells more - which is precisely why the registry names a rate as\nthe north star and why this table serves it first.\n\nRows the holdout cannot answer are returned with nulls and a reason rather\nthan omitted. Ninety-day retention is customer-level while the holdout\nrandomises stores; forecast WAPE is a property of Policy B's forecast, and\nPolicy A does not forecast. Dropping them would read as an oversight and\nfilling them would be invention.",
+        "operationId": "experiment_experiment_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The policy A/B readout"
       }
     },
     "/health": {
