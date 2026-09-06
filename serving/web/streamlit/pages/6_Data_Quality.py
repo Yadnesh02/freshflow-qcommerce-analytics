@@ -179,10 +179,27 @@ st.divider()
 
 # ------------------------------------------------------------------ the ledger
 st.subheader("What was wrong with this data")
-st.caption(
-    "The raw feeds were dirtied deliberately, so that the repairs in staging are demonstrable "
-    "rather than claimed. Every row here is a defect the pipeline is built to survive."
-)
+
+# The heading is unconditional and the caption is not. On the deployed slice the
+# ledger is absent - it is written by the simulator and the demo carries marts
+# only - and an earlier version rendered the heading and a caption promising
+# "every row here is a defect" above nothing at all. A section that advertises a
+# table it cannot show reads as a broken page rather than as a missing input,
+# which is the same failure the Action Queue's empty-state notes exist to avoid.
+if defects:
+    st.caption(
+        "The raw feeds were dirtied deliberately, so that the repairs in staging are demonstrable "
+        "rather than claimed. Every row here is a defect the pipeline is built to survive."
+    )
+else:
+    st.info(
+        "**The defect ledger is not carried by this build.** Eight defects were injected into the "
+        "raw feeds on purpose and staging repairs each one, but the ledger that records them is "
+        "written by the simulator and the deployed slice carries marts only. "
+        "[`docs/known_data_issues.md`](https://github.com/Yadnesh02/freshflow-qcommerce-analytics/blob/main/docs/known_data_issues.md)"
+        " carries the same eight with the repair for each.",
+        icon=":material/info:",
+    )
 
 if defects:
     st.dataframe(

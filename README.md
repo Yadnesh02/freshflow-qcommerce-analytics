@@ -85,6 +85,14 @@ simulator ─▶ bronze (parquet) ─▶ silver (dbt staging) ─▶ gold (dbt m
 That last arrow is the point: recommendations are executed in the next simulated day, so impact is
 **measured** rather than estimated.
 
+![The Dagster asset graph — 60 assets and 362 checks, grouped by warehouse layer](docs/img/dagster_lineage.png)
+
+The same pipeline as an asset graph: 60 assets and 362 checks, with dbt arriving as 54 individual
+model assets carrying their real edges rather than one opaque step. Grouped by warehouse layer,
+because the default put all 54 in `default` and made the graph unreadable. The nightly schedule
+**excludes the simulator** — regenerating the world would make every historical figure
+irreproducible.
+
 ## What the app shows
 
 | Page | The decision it supports |

@@ -592,14 +592,8 @@ Ordering is deliberate for **Senior Data Analyst now**: business problem and imp
 
 ## 14. Definition of Done
 
-- [ ] `git clone && make setup && make all` reproduces everything from scratch on a clean Windows machine —
-  **the blocker is fixed but the end-to-end run has not been executed.** `tasks.py all` had been dead
-  since S4.6: `t_recommend` called `analytics.optimization.run_all`, a module nobody ever wrote, and
-  its `not_yet` guard tested for a file that exists so it never fired. Fixed at `b9a6df2`, with a test
-  that resolves every module `tasks.py` claims to run. **Still to do:** dispatch `warehouse.yml` and
-  collapse its six separate engine steps into `tasks.py recommend`, as that file's own comment says it
-  should — until then nothing in CI exercises the chain and only unit tests cover the order.
-- [ ] README: architecture diagram, ERD, results table, screenshots, live links, honest synthetic-data statement
+- [x] `git clone && setup && all` reproduces everything from scratch — **verified on a clean Linux runner, not on Windows.** `warehouse.yml` run 34028321712 ran setup → simulate → build → forecast → **recommend** → policy-bundle from a clone, green in 16m04s, and that is `tasks.py all`'s chain with `simulate` and `build` taking their own arguments. The blocker was real and is fixed: `t_recommend` called `analytics.optimization.run_all`, a module nobody ever wrote, behind a `not_yet` guard that tested for a file which exists and so never fired. **What is untested is Windows specifically**, and that is not chaseable here — the only Windows machine available has faulty RAM and a warehouse that fails five of seven anchors, so it could not certify a clean build even if it ran one.
+- [x] README: architecture diagram, ERD, results table, live links, honest synthetic-data statement — all present, and the results table now leads with the experiment's negative result, which was missing entirely until S5.9. **Screenshots: the Dagster asset graph is embedded** (it had been committed for S5.6's gate and never placed). App screenshots are not embedded — the live link is one click and the app was verified rendering all six pages on 2026-09-06; add them if a reader who will not click becomes the audience.
 - [x] Live dashboard URL + live dbt docs URL — ~~live API `/docs` (OpenAPI)~~ **dropped, deliberately.**
   The app talks to FastAPI **in-process over ASGI**: a real request cycle — routing, validation, the
   resolver, the exception handlers — with no socket. Deploying a second service purely to host a
@@ -614,9 +608,9 @@ Ordering is deliberate for **Senior Data Analyst now**: business problem and imp
 - [x] Experiment readout with confidence intervals, sensitivity analysis and component attribution — S5.1–S5.5, four of six rows filled and two named rather than fudged.
 - [x] `sql_showcase/` with 15 documented queries — executed by the test suite against a built warehouse, not merely stored.
 - [x] Business case, 2 pages, exec tone — written as [`docs/business_case.md`](business_case.md). **Markdown rather than PDF on purpose:** the source is diffable in a pull request, which is the same argument this project makes for the metric registry over a `.pbix`. Render to PDF from the browser if a PDF is wanted; adding a rendering dependency for one document is a cost `packages.yml` already refuses elsewhere.
-- [ ] 3-minute walkthrough linked in the README — **shot list and narration written** in [`docs/walkthrough_script.md`](walkthrough_script.md); the recording is yours to make.
+- [~] 3-minute walkthrough — **DEFERRED BY DECISION, 2026-09-06.** The shot list and narration are written in [`docs/walkthrough_script.md`](walkthrough_script.md) and the recording is a sitting's work whenever it is wanted. Skipped for now rather than left as an open task: nothing else depends on it, and the script means picking it up costs no thinking.
 - [x] Résumé bullets written with **real measured numbers** — [`docs/resume_and_story.md`](resume_and_story.md), including the three framings to avoid and why.
-- [ ] You can tell the whole story in 60 seconds without notes — script drafted in [`docs/resume_and_story.md`](resume_and_story.md); **only you can tick this one.**
+- [~] Tell the whole story in 60 seconds without notes — **DEFERRED BY DECISION, 2026-09-06.** Drafted in [`docs/resume_and_story.md`](resume_and_story.md), with the questions it invites and the three framings to avoid. Rehearsal is the only remaining step and it belongs to interview prep rather than to the build.
 
 ---
 
