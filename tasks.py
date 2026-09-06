@@ -347,7 +347,15 @@ def t_app(args: argparse.Namespace) -> int:
 def t_dagster(_: argparse.Namespace) -> int:
     """Open the Dagster UI."""
     os.environ.setdefault("DAGSTER_HOME", str(ROOT / "dagster_home"))
-    Path(os.environ["DAGSTER_HOME"]).mkdir(exist_ok=True)
+    home = Path(os.environ["DAGSTER_HOME"])
+    home.mkdir(exist_ok=True)
+    # An empty dagster.yaml means "use the defaults", which is what we want -
+    # but without the file Dagster prints a paragraph of warning about it on
+    # every start, and a first-run warning that is safe to ignore teaches people
+    # to ignore the next one.
+    config = home / "dagster.yaml"
+    if not config.exists():
+        config.write_text("# defaults are fine for local development\n", encoding="utf-8")
     return run([sys.executable, "-m", "dagster", "dev", "-m", "orchestration.definitions"])
 
 
