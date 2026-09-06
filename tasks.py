@@ -30,7 +30,6 @@ DATA_DIRS = [DATA / "raw", DATA / "warehouse", DEMO.parent]
 # targets that are not built yet - each is claimed by a task in docs/EXECUTION_PLAN.md
 PENDING = {
     "simulate": "S1.7",
-    "recommend": "S4.6",
     "experiment": "S5.1",
     "demo-slice": "S2.8",
 }
@@ -176,11 +175,37 @@ def t_forecast(_: argparse.Namespace) -> int:
     return py("-m", "analytics.forecasting.train")
 
 
-def t_recommend(_: argparse.Namespace) -> int:
-    """Run the decision engine and write the rec_* action tables."""
-    if not (ROOT / "analytics" / "optimization" / "markdown.py").exists():
-        return not_yet("recommend")
-    return py("-m", "analytics.optimization.run_all")
+def t_recommend(args: argparse.Namespace) -> int:
+    """Run the five decision engines and write the rec_* action tables.
+
+    **This used to call `analytics.optimization.run_all`, which has never
+    existed.** Its `not_yet` guard tested for `markdown.py` - present since
+    S4.2 - so the guard stopped firing while the module it guarded was never
+    written, and `tasks.py all` and `tasks.py recommend` both failed with a
+    ModuleNotFoundError. Another instance of the pattern this project keeps
+    hitting: a check that passes without its mechanism ever running.
+    `test_every_task_names_a_module_that_exists` now walks this file and
+    imports what each target claims to run.
+
+    The order is a dependency order, not a preference: expiry risk scores the
+    batches everything else reasons about, and elasticity has to be fitted
+    before the markdown optimiser can read a coefficient. `warehouse.yml`
+    spells the same sequence out step by step, with a comment saying it would
+    collapse into one step once this function worked. It does now.
+    """
+    engines = (
+        t_expiry_risk,
+        t_elasticity,
+        t_markdown,
+        t_deal_slots,
+        t_transfers,
+        t_newsvendor,
+    )
+    for engine in engines:
+        code = engine(args)
+        if code != 0:
+            return code
+    return 0
 
 
 def t_experiment(_: argparse.Namespace) -> int:
@@ -441,7 +466,7 @@ def t_clean(_: argparse.Namespace) -> int:
 
 def t_all(args: argparse.Namespace) -> int:
     """Full rebuild: simulate -> build -> forecast -> recommend."""
-    for fn in (t_setup, t_simulate, t_build, t_forecast, t_recommend):
+    for fn in (t_setup, t_simulate, t_build, t_forecast, t_recommend, t_policy_bundle):
         if fn(args) != 0:
             return 1
     return 0
@@ -528,21 +553,21 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "actions":
             p.add_argument("--policy", default="both", choices=["baseline", "optimized", "both"])
             p.add_argument("--days", type=int, default=75, help="warm-up days before the readout")
-        if name == "newsvendor":
+        if name in ("newsvendor", "recommend", "all"):
             p.add_argument(
                 "--retention-cost",
                 type=float,
                 default=0.0,
                 help="AN ASSUMPTION: rupees of retention damage per unit short",
             )
-        if name == "transfers":
+        if name in ("transfers", "recommend", "all"):
             p.add_argument(
                 "--fixed-trip-cost",
                 type=float,
                 default=300.0,
                 help="AN ASSUMPTION: rupees per van trip, paid once per store pair",
             )
-        if name == "deal-slots":
+        if name in ("deal-slots", "recommend", "all"):
             p.add_argument("--slots", type=int, default=3)
             p.add_argument(
                 "--reactivation-value",
@@ -550,7 +575,7 @@ def build_parser() -> argparse.ArgumentParser:
                 default=0.0,
                 help="AN ASSUMPTION: rupees a reactivated customer is worth",
             )
-        if name == "markdown":
+        if name in ("markdown", "recommend", "all"):
             p.add_argument(
                 "--budget",
                 type=float,

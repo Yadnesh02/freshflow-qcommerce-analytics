@@ -1,5 +1,9 @@
 # FreshFlow
 
+[![CI](https://github.com/Yadnesh02/freshflow-qcommerce-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Yadnesh02/freshflow-qcommerce-analytics/actions/workflows/ci.yml)
+[![Warehouse build](https://github.com/Yadnesh02/freshflow-qcommerce-analytics/actions/workflows/warehouse.yml/badge.svg)](https://github.com/Yadnesh02/freshflow-qcommerce-analytics/actions/workflows/warehouse.yml)
+[![dbt docs](https://img.shields.io/badge/dbt%20docs-live-informational)](https://yadnesh02.github.io/freshflow-qcommerce-analytics/)
+
 **Perishable inventory, markdown and promotion analytics for quick-commerce dark stores.**
 
 A 14-store dark-store network in Mumbai generates ~5.5M order lines a year. Roughly a quarter of
@@ -14,7 +18,7 @@ takes today's ₹11 deal slot, and which customers to nudge.
 
 ### ▶ The app
 
-**FreshFlow Control Tower** — three pages, reading only from the metrics API. Every tile has a
+**FreshFlow Control Tower** — six pages, reading only from the metrics API. Every tile has a
 **see query** control that shows the exact SQL that produced its number and the registry definition
 that compiled it.
 
@@ -34,7 +38,7 @@ fetches its warehouse slice from a GitHub Release on wake.
 
 ## Status
 
-🚧 **In development.** Sprint 4 of 5 — see [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
+🚧 **In development.** Sprint 5 of 5, 9 of its 10 tasks done — see [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
 
 | Sprint | Scope | State |
 |---|---|---|
@@ -43,7 +47,7 @@ fetches its warehouse slice from a GitHub Release on wake.
 | 2 | Warehouse, dbt marts, data quality | ✅ done — gate G2 passed |
 | 3 | Forecast, expiry risk, live app | ✅ done — **gate G3 passed**, live public URL |
 | 4 | Decision engine | ✅ done — gate G4 passed |
-| 5 | Impact proof, orchestration, polish | — |
+| 5 | Impact proof, orchestration, polish | 🚧 9/10 — experiment, holdout, sensitivity, ablation, readout, Dagster, data quality and the SQL showcase done; final docs remain |
 
 ---
 
@@ -81,6 +85,9 @@ That last arrow is the point: recommendations are executed in the next simulated
 | **Executive** | Which stores are losing margin to wastage — read next to the retention guardrail, because margin bought by running stores empty looks like a win here and like churn on the customer page. |
 | **Expiry Control Tower** | The action queue: every batch about to expire, ranked by rupees at risk, with the forecast that says whether it will actually sell. |
 | **Demand & Availability** | Where the forecast beats guessing and where it does not, so ordering can follow the model on the head and a reorder rule on the tail. |
+| **Price Elasticity** | What price response was actually measurable, and where it was not — unidentified cells are shown rather than hidden, because a clean curve for every category would imply the last day was measured. |
+| **Action Queue** | The four engines' output for one morning, grouped rather than ranked against each other, because an order line and a transfer are different rupees. |
+| **Data Quality** | Whether any feed stopped arriving, what the last Soda scan said, and the eight defects injected into the raw layer with the repair for each — a page of green checks would hide the most interesting thing about the build. |
 
 ### Two things vendor BI cannot do
 
@@ -129,6 +136,35 @@ Numbers a reader can check against the code, not claims.
 
 Each of those lives in the docstring of the model that produced it, with the query that measured it.
 
+### The headline, and it is not the one this project set out to find
+
+**The optimised policy loses on the metric declared before the experiment ran.**
+
+A store-level randomised holdout — 14 stores, 180 days, half switching to Policy B on day 46, 30
+independent seeds — measures this by difference-in-differences:
+
+| Metric | Policy A | Policy B | Difference-in-differences | 95% CI |
+|---|---|---|---|---|
+| **Gross margin after wastage** — *the north star* | 22.21% | 20.74% | **−1.37pp** | [−1.65, −1.09] |
+| Availability | 79.10% | 81.94% | **+2.92pp** | [+2.74, +3.10] |
+| Wastage rate on revenue | 1.90% | 3.78% | **+1.83pp** | [+1.61, +2.05] |
+| Markdown subsidy per store-day | ₹1,258.52 | ₹326.77 | **−₹1,042.91** | [−1,237, −849] |
+
+Every row is significant across all 30 seeds. Policy B buys **+2.9pp of availability and roughly
+doubles write-offs**, and on gross margin after wastage — the rate the metric registry named as the
+north star *before* any of this ran — it is **1.37pp worse**. Component attribution puts essentially
+all of that on the newsvendor, which trades wastage for availability by design; markdown restraint
+is the largest positive contributor.
+
+A margin figure quoted as a rupee *level* rises here, because Policy B sells more. That is why the
+north star is a rate net of wastage and why it was declared in `semantic/metrics.yml` up front —
+the discipline exists precisely so a result like this cannot be re-framed after the fact.
+
+Every number above is served from `mart_experiment_readout`, which is built from a committed
+parquet produced by a workflow anyone can re-run from a clone. Two of the plan's six rows are
+**named rather than filled**: 90-day retention is customer-level while the holdout randomises
+stores, and forecast WAPE has no Policy A column because Policy A does not forecast.
+
 ---
 
 ## Honest limitations
@@ -141,8 +177,9 @@ Each of those lives in the docstring of the model that produced it, with the que
 - **The expiry model ranks write-off risk, not total unsold stock.** Batches down to their last unit
   or two often never move at all; that is a picking problem no demand model sees, and
   [a test holds the gap open in numbers](tests/test_expiry_risk.py).
-- **Seven of 31 metrics have no data yet** — their sources are Sprint 4/5 tables. They skip loudly
-  rather than passing quietly.
+- **Six of 31 metrics have no data yet** — `mart_markdown_perf`, `mart_deal_slot_perf` and
+  `dq_test_results` are not built, so the metrics reading them skip loudly rather than passing
+  quietly. Every other metric compiles and executes in CI.
 - **The deployed slice is 5 stores × 90 days**, marts only, because Community Cloud gives the app
   1 GB. Every number on it equals the same number computed on the full warehouse restricted the same
   way, and [a test asserts exactly that](tests/test_demo_slice.py).
@@ -163,7 +200,10 @@ python tasks.py setup
 python tasks.py all
 ```
 
-Run `python tasks.py --help` for the full target list.
+That is the whole rebuild: directories, a 365-day simulated year, the dbt warehouse, the forecast,
+the five decision engines and the policy bundle the experiment reads. Run
+`python tasks.py --help` for the full target list, or `python tasks.py sql-showcase` to execute the
+fifteen showcase queries against the build.
 
 ## Documentation
 
@@ -176,7 +216,8 @@ Run `python tasks.py --help` for the full target list.
 | [Metric dictionary](docs/metrics.md) | 31 metrics, generated from `semantic/metrics.yml` — never hand-edited |
 | [Data profile](docs/data_profile.html) | What a year of the generated network looks like, and the problems inside it |
 | [Known data issues](docs/known_data_issues.md) | The eight defects deliberately injected into the raw layer, and how staging handles each |
-| [Control Tower](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/) | The live app — five pages, every tile able to show the SQL behind its number |
+| [SQL showcase](sql_showcase/) | Fifteen documented queries, each executed by the test suite against a built warehouse |
+| [Control Tower](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/) | The live app — six pages, every tile able to show the SQL behind its number |
 | [dbt docs](https://yadnesh02.github.io/freshflow-qcommerce-analytics/) | Live lineage graph, every model, column and test — regenerated from `main` on every push |
 
 ## Licence
