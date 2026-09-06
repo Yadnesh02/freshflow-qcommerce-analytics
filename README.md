@@ -47,13 +47,14 @@ fetches its warehouse slice from a GitHub Release on wake.
 | 2 | Warehouse, dbt marts, data quality | ✅ done — gate G2 passed |
 | 3 | Forecast, expiry risk, live app | ✅ done — **gate G3 passed**, live public URL |
 | 4 | Decision engine | ✅ done — gate G4 passed |
-| 5 | Impact proof, orchestration, polish | 🚧 9/10 — experiment, holdout, sensitivity, ablation, readout, Dagster, data quality and the SQL showcase done; final docs remain |
+| 5 | Impact proof, orchestration, polish | 🚧 10/10 built — experiment, holdout, sensitivity, ablation, readout, Dagster, data quality, SQL showcase, business case and ADRs. **Outstanding: the walkthrough recording** ([script is written](docs/walkthrough_script.md)) |
 
-Gates G1–G4 are marked passed in [the plan's checkpoint table](docs/EXECUTION_PLAN.md), each with the
-test that carries it named rather than asserted. **G5 is deliberately unmarked** until Sprint 5
-closes — its reproducibility half is evidenced, and its traceability half was a real hole until
-`mart_experiment_readout`, the terminal table of the whole chain, was given the contract every other
-mart already had.
+**All five checkpoint gates pass**, and [the plan's table](docs/EXECUTION_PLAN.md) names the test
+that carries each rather than asserting it. G5 was the last, and it was held open for a real reason:
+its clause is that every published number is traceable to `mart_experiment_readout`, and that table —
+the terminal one in the whole chain — was the only mart in the project with no schema entry, no
+tests and no entry in the dbt docs catalogue. It now has the contract the other 36 models already
+had, verified green in CI.
 
 ---
 
@@ -215,6 +216,8 @@ fifteen showcase queries against the build.
 
 | Document | What's in it |
 |---|---|
+| [Business case](docs/business_case.md) | Two pages, exec tone: what was tested, what it found, what we would ship — and what would change the answer |
+| [Decision records](docs/adr/) | Eight ADRs, each with the alternative that was seriously considered and what the choice cost |
 | [Project plan](docs/PROJECT_1_PLAN.md) | Business problems, metric definitions, data model, workstreams, impact methodology |
 | [Project plan (PDF)](docs/FreshFlow_Project_Plan.pdf) | Same, formatted |
 | [Execution plan](docs/EXECUTION_PLAN.md) | Setup commands, 47 build tasks, acceptance gates |

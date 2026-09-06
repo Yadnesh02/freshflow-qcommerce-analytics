@@ -592,19 +592,31 @@ Ordering is deliberate for **Senior Data Analyst now**: business problem and imp
 
 ## 14. Definition of Done
 
-- [ ] `git clone && make setup && make all` reproduces everything from scratch on a clean Windows machine
+- [ ] `git clone && make setup && make all` reproduces everything from scratch on a clean Windows machine —
+  **the blocker is fixed but the end-to-end run has not been executed.** `tasks.py all` had been dead
+  since S4.6: `t_recommend` called `analytics.optimization.run_all`, a module nobody ever wrote, and
+  its `not_yet` guard tested for a file that exists so it never fired. Fixed at `b9a6df2`, with a test
+  that resolves every module `tasks.py` claims to run. **Still to do:** dispatch `warehouse.yml` and
+  collapse its six separate engine steps into `tasks.py recommend`, as that file's own comment says it
+  should — until then nothing in CI exercises the chain and only unit tests cover the order.
 - [ ] README: architecture diagram, ERD, results table, screenshots, live links, honest synthetic-data statement
-- [ ] Live dashboard URL + live dbt docs URL + live API `/docs` (OpenAPI)
-- [ ] CI green badge
-- [ ] ≥60 dbt tests, all passing; reconciliation test exact to the rupee
-- [ ] Every metric in `semantic/metrics.yml` renders to SQL and executes in CI; `docs/metrics.md` is generated, not hand-written
-- [ ] No number appears on a dashboard that isn't in the metric registry
-- [ ] Experiment readout with confidence intervals, sensitivity analysis, and component attribution
-- [ ] `sql_showcase/` with 15 documented queries
-- [ ] `docs/business_case.pdf` — 2 pages, exec tone
-- [ ] 3-minute Loom walkthrough linked in the README
-- [ ] Resume bullets written with **real measured numbers**
-- [ ] You can tell the whole story in 60 seconds without notes
+- [x] Live dashboard URL + live dbt docs URL — ~~live API `/docs` (OpenAPI)~~ **dropped, deliberately.**
+  The app talks to FastAPI **in-process over ASGI**: a real request cycle — routing, validation, the
+  resolver, the exception handlers — with no socket. Deploying a second service purely to host a
+  Swagger page would add a 30–60 second cold start to the first page view of a portfolio demo and a
+  second thing that can be down, to publish something the repository already carries as a committed
+  `serving/api/openapi.json` that a test asserts matches the running app. The API boundary is real
+  and enforced; only the network is absent, and this line asked for the network.
+- [x] CI green badge — three, at the top of the README: `ci.yml`, `warehouse.yml`, dbt docs. `ci.yml` was **red for seven commits** from `3a745da` before anyone looked, because the Dagster asset graph needs a dbt manifest that `transform/target/` gitignores; green since `c77ecae`.
+- [x] ≥60 dbt tests, all passing — **382**, including `assert_agg_revenue_ties_to_raw_order_totals`, which states gate G2's clause as the plan words it and runs on every build.
+- [x] Every metric renders to SQL and executes in CI; `docs/metrics.md` is generated and CI fails on drift. **Six of 31 skip loudly** — `mart_markdown_perf`, `mart_deal_slot_perf` and `dq_test_results` are not built.
+- [x] No number appears on a dashboard that isn't in the metric registry — gate G3, enforced on the syntax tree rather than by convention.
+- [x] Experiment readout with confidence intervals, sensitivity analysis and component attribution — S5.1–S5.5, four of six rows filled and two named rather than fudged.
+- [x] `sql_showcase/` with 15 documented queries — executed by the test suite against a built warehouse, not merely stored.
+- [x] Business case, 2 pages, exec tone — written as [`docs/business_case.md`](business_case.md). **Markdown rather than PDF on purpose:** the source is diffable in a pull request, which is the same argument this project makes for the metric registry over a `.pbix`. Render to PDF from the browser if a PDF is wanted; adding a rendering dependency for one document is a cost `packages.yml` already refuses elsewhere.
+- [ ] 3-minute walkthrough linked in the README — **shot list and narration written** in [`docs/walkthrough_script.md`](walkthrough_script.md); the recording is yours to make.
+- [x] Résumé bullets written with **real measured numbers** — [`docs/resume_and_story.md`](resume_and_story.md), including the three framings to avoid and why.
+- [ ] You can tell the whole story in 60 seconds without notes — script drafted in [`docs/resume_and_story.md`](resume_and_story.md); **only you can tick this one.**
 
 ---
 
