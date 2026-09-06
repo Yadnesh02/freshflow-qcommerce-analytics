@@ -101,38 +101,32 @@ jobs:
       # which is how the gap was found - but the workflow is where the order
       # actually has to be written down.
       #
-      # These are ten explicit steps rather than one `tasks.py all` because
-      # `t_all` is currently broken: it calls `t_recommend`, which imports
-      # `analytics.optimization.run_all`, a module that does not exist. Its
-      # `not_yet` guard tests for `markdown.py`, which has existed since S4.2,
-      # so the guard stopped firing while the module was never written. Worth
-      # fixing, and then this block collapses into one step and cannot drift.
+      # The step below this pair used to be six, one per decision engine, with a
+      # comment saying they would collapse once `t_recommend` worked - it called
+      # `analytics.optimization.run_all`, a module nobody ever wrote, behind a
+      # `not_yet` guard that tested for a file which exists and so never fired.
+      # Fixed at b9a6df2, and collapsed here at the same time, because the
+      # duplication was the real cost: the dependency order lived in this file
+      # AND in tasks.py, nothing compared them, and `tasks.py recommend` was
+      # code no build ever executed.
+      #
+      # Not `tasks.py all` - that would swallow `simulate` and `build`, which
+      # need their own arguments and their own place in the sequence above.
       - name: Backtest the forecast baselines
         run: uv run python tasks.py backtest
 
       - name: Train the demand forecast
         run: uv run python tasks.py forecast
 
-      # The five Sprint 4 engines. Ordered by dependency: expiry risk scores the
-      # batches everything else reasons about, and elasticity is fitted before
-      # the markdown optimiser can read a coefficient.
-      - name: Score expiry risk
-        run: uv run python tasks.py expiry-risk
-
-      - name: Fit price elasticity
-        run: uv run python tasks.py elasticity
-
-      - name: Markdown optimiser
-        run: uv run python tasks.py markdown
-
-      - name: Deal-slot allocator
-        run: uv run python tasks.py deal-slots
-
-      - name: Transfer optimiser
-        run: uv run python tasks.py transfers
-
-      - name: Newsvendor replenishment
-        run: uv run python tasks.py newsvendor
+      # The five Sprint 4 engines, in the dependency order `t_recommend` owns:
+      # expiry risk scores the batches everything else reasons about, and
+      # elasticity is fitted before the markdown optimiser can read a
+      # coefficient. One step rather than six loses nothing in the log - the
+      # runner prints each command as it starts it, and the chain stops at the
+      # first non-zero exit and returns that engine's code rather than carrying
+      # on and building later tables from whatever the previous run left.
+      - name: Decision engines
+        run: uv run python tasks.py recommend
 
       # Policy B reads this bundle rather than the rec_* tables (S4.6), and it
       # is committed - which is what lets an experiment job run with no
