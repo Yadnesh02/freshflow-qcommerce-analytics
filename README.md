@@ -18,7 +18,7 @@ takes today's ₹11 deal slot, and which customers to nudge.
 
 ### ▶ The app
 
-**FreshFlow Control Tower** — six pages, reading only from the metrics API. Every tile has a
+**FreshFlow Control Tower** — seven pages, reading only from the metrics API. Every tile has a
 **see query** control that shows the exact SQL that produced its number and the registry definition
 that compiled it.
 
@@ -103,6 +103,7 @@ irreproducible.
 | **Price Elasticity** | What price response was actually measurable, and where it was not — unidentified cells are shown rather than hidden, because a clean curve for every category would imply the last day was measured. |
 | **Action Queue** | The four engines' output for one morning, grouped rather than ranked against each other, because an order line and a transfer are different rupees. |
 | **Data Quality** | Whether any feed stopped arriving, what the last Soda scan said, and the eight defects injected into the raw layer with the repair for each — a page of green checks would hide the most interesting thing about the build. |
+| **Warehouse** | The base rows under every other page, for the question that comes after a number looks wrong. Browsing only: it can window a relation and sort it, and it cannot aggregate — so there is still no route to a figure the registry never declared. |
 
 ### Two things vendor BI cannot do
 
@@ -234,7 +235,7 @@ fifteen showcase queries against the build.
 | [Data profile](docs/data_profile.html) | What a year of the generated network looks like, and the problems inside it |
 | [Known data issues](docs/known_data_issues.md) | The eight defects deliberately injected into the raw layer, and how staging handles each |
 | [SQL showcase](sql_showcase/) | Fifteen documented queries, each executed by the test suite against a built warehouse |
-| [Control Tower](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/) | The live app — six pages, every tile able to show the SQL behind its number |
+| [Control Tower](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/) | The live app — seven pages, every tile able to show the SQL behind its number |
 | [dbt docs](https://yadnesh02.github.io/freshflow-qcommerce-analytics/) | Live lineage graph, every model, column and test — regenerated from `main` on every push |
 
 ## Licence

@@ -351,3 +351,121 @@ def test_the_committed_openapi_matches_the_running_app(client) -> None:
         "serving/api/openapi.json has drifted from the app - "
         "run `python tasks.py openapi` and commit the result"
     )
+
+
+# ================================================== the warehouse browser
+# The browser serves base rows rather than registry metrics, so the property to
+# check is not "did it return the right number" but "is there still no way to
+# ask it for a number nobody declared". Identifiers are the whole surface: they
+# cannot be bound as parameters, so if they are not whitelisted they are a hole.
+
+
+def test_the_catalogue_describes_the_open_build_not_the_dbt_project(client, con) -> None:
+    """What the file holds, which on the published slice is a smaller set.
+
+    Reading the manifest instead would offer the page a dozen relations the
+    deployed build does not carry, and each would 404 on click.
+    """
+    body = client.get("/warehouse/catalogue").json()
+    served = {(r["schema_name"], r["name"]) for r in body["data"]}
+
+    stored = {
+        (row[0], row[1])
+        for row in con.execute(
+            "select schema_name, table_name from duckdb_tables() "
+            "union all select schema_name, view_name from duckdb_views() where not internal"
+        ).fetchall()
+    }
+    assert served == stored, "the catalogue and the database disagree about what exists"
+    assert body["meta"]["sql"], "the catalogue does not show its own statement"
+
+
+def test_a_view_reports_no_row_count_because_it_stores_no_rows(client) -> None:
+    """The distinction the page exists to teach, carried in the payload.
+
+    A view with a row count would imply it costs storage. It does not - it holds
+    its SELECT text and rescans the parquet - and the null is what says so.
+    """
+    relations = client.get("/warehouse/catalogue").json()["data"]
+    views = [r for r in relations if r["kind"] == "view"]
+    if not views:
+        pytest.skip("this build carries no views - the published slice is marts only")
+    assert all(v["rows"] is None for v in views)
+    assert all(r["rows"] is not None for r in relations if r["kind"] == "table")
+
+
+def test_the_column_notes_come_from_the_file_rather_than_the_manifest(client) -> None:
+    """`persist_docs` writes the dbt descriptions into the database as COMMENTs.
+
+    Reading them back from there rather than from `target/` is what lets the
+    page describe a warehouse built by somebody else's run.
+    """
+    relations = {r["name"]: r for r in client.get("/warehouse/catalogue").json()["data"]}
+    agg = relations.get("agg_store_sku_day")
+    if agg is None:
+        pytest.skip("agg_store_sku_day is not in this build")
+    assert agg["note"] and "One row per store, SKU and day" in agg["note"]
+    key = next(c for c in agg["columns"] if c["name"] == "store_sku_day_key")
+    assert key["note"], "the column comment did not survive the round trip"
+
+
+def test_rows_are_windowed_and_echo_the_statement_that_produced_them(client) -> None:
+    body = client.get("/warehouse/rows/marts/dim_store", params={"limit": 3}).json()
+    assert len(body["data"]) <= 3
+    assert body["meta"]["rows"] == len(body["data"])
+    assert body["meta"]["sql"].startswith('select * from "marts"."dim_store"')
+    assert "limit 3" in body["meta"]["sql"]
+
+
+def test_the_row_window_is_capped_however_much_the_caller_asks_for(client) -> None:
+    """Same ceiling as the metrics endpoints, and for the same reason."""
+    from serving.api.main import MAX_ROWS
+
+    response = client.get(
+        "/warehouse/rows/marts/agg_store_sku_day", params={"limit": MAX_ROWS * 10}
+    )
+    if response.status_code == 404:
+        pytest.skip("agg_store_sku_day is not in this build")
+    assert f"limit {MAX_ROWS}" in response.json()["meta"]["sql"]
+
+
+def test_an_unknown_relation_is_a_404_that_says_builds_differ(client) -> None:
+    body = client.get("/warehouse/rows/marts/mart_invented_yesterday").json()
+    assert "marts.mart_invented_yesterday" in body["detail"]
+    assert "slice" in body["detail"]
+
+
+def test_an_order_by_that_is_not_a_column_is_refused_rather_than_interpolated(client) -> None:
+    """The injection everyone writes once, checked rather than trusted.
+
+    DuckDB binds values and never identifiers, so `order_by` reaches the SQL as
+    text or not at all. It is matched against `information_schema` first, which
+    is why this is a 400 naming the column instead of a syntax error - or worse,
+    a statement that ran.
+    """
+    response = client.get(
+        "/warehouse/rows/marts/dim_store",
+        params={"order_by": "store_id; drop table marts.dim_store"},
+    )
+    assert response.status_code == 400
+    assert "not a column" in response.json()["detail"]
+
+
+def test_an_order_direction_outside_asc_desc_never_reaches_the_statement(client) -> None:
+    response = client.get(
+        "/warehouse/rows/marts/dim_store",
+        params={"order_by": "store_id", "order_dir": "asc, 1 --"},
+    )
+    assert response.status_code == 422, "the direction is validated by pattern, not by trust"
+
+
+def test_the_browser_cannot_aggregate(client) -> None:
+    """The line that keeps G3 intact while still showing base data.
+
+    The page can window a relation and sort it. It cannot group, filter by
+    expression, or compute - so there is no route here to a number the registry
+    did not declare, only to rows that were already stored.
+    """
+    spec = client.get("/openapi.json").json()["paths"]["/warehouse/rows/{schema_name}/{table}"]
+    accepted = {p["name"] for p in spec["get"]["parameters"]}
+    assert accepted == {"schema_name", "table", "limit", "offset", "order_by", "order_dir"}

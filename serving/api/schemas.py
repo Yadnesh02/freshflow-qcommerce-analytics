@@ -256,3 +256,53 @@ class ExperimentResponse(BaseModel):
     data: list[ExperimentRow]
     meta: ResponseMeta
     warnings: list[str] = []
+
+
+# ---------------------------------------------------------------- warehouse
+# The browser endpoints return base rows rather than registry metrics, so they
+# are deliberately a separate family of shapes. `meta.sql` still holds - a grid
+# the reader cannot trace is no more acceptable than a tile they cannot trace -
+# but `metric_definition` is null here, and that null is the honest signal that
+# these numbers were never declared in `metrics.yml`.
+
+
+class RelationColumn(BaseModel):
+    """One column, carrying the description dbt persisted into the file itself."""
+
+    name: str
+    type: str
+    note: str | None = Field(
+        default=None,
+        description="The dbt column description, read back out of the database's own COMMENT.",
+    )
+
+
+class Relation(BaseModel):
+    """One table or view, as the database reports itself rather than as dbt planned it."""
+
+    schema_name: str
+    name: str
+    kind: str = Field(description="`table` or `view`.")
+    rows: int | None = Field(
+        default=None,
+        description=(
+            "DuckDB's stored row estimate. Null for a view, which stores its SELECT "
+            "text and no rows at all."
+        ),
+    )
+    note: str | None = None
+    columns: list[RelationColumn] = Field(default_factory=list)
+
+
+class WarehouseCatalogueResponse(BaseModel):
+    """Everything the open warehouse holds, which is not the same set in every build."""
+
+    data: list[Relation]
+    meta: ResponseMeta
+
+
+class WarehouseRowsResponse(BaseModel):
+    """A page of stored rows. `meta.sql` is the statement that produced exactly this grid."""
+
+    data: list[dict[str, Any]]
+    meta: ResponseMeta

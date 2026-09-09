@@ -210,3 +210,33 @@ class MetricsClient:
 
     def health(self) -> ApiResult:
         return self._get("/health")
+
+    # ------------------------------------------------------------- warehouse
+    def warehouse_catalogue(self) -> ApiResult:
+        """Every relation the *open* build holds, which is not what dbt would build.
+
+        Distinct from `catalogue()`, which lists published metrics. This one
+        describes storage: tables, views, row estimates and the column comments
+        dbt persisted into the file.
+        """
+        return self._get("/warehouse/catalogue")
+
+    def warehouse_rows(
+        self,
+        schema_name: str,
+        table: str,
+        limit: int = 50,
+        offset: int = 0,
+        order_by: str | None = None,
+        order_dir: str = "asc",
+    ) -> ApiResult:
+        """One page of stored rows. Always windowed; there is no unbounded read."""
+        return self._get(
+            f"/warehouse/rows/{schema_name}/{table}",
+            {
+                "limit": limit,
+                "offset": offset,
+                "order_by": order_by,
+                "order_dir": order_dir if order_by else None,
+            },
+        )

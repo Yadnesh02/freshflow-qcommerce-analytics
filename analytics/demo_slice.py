@@ -177,6 +177,52 @@ def pick_stores(con: duckdb.DuckDBPyConnection, count: int) -> list[str]:
     return [r[0] for r in rows[:count]]
 
 
+def _carry_comments(con: duckdb.DuckDBPyConnection, tables: list[str]) -> int:
+    """Copy the dbt descriptions across, because CREATE TABLE AS does not.
+
+    `persist_docs` writes every model and column description into the warehouse
+    as a DuckDB COMMENT, and the Warehouse page reads them back out of the file
+    rather than out of `target/` - which is what lets it describe a build it did
+    not produce. A CTAS copies rows and types and nothing else, so without this
+    the published slice arrives with 589 columns and not one word about any of
+    them, and the deployed page explains nothing.
+
+    Columns dropped by PRUNED simply have no comment to land on; joining against
+    the slice's own catalogue rather than the source's is what skips them.
+    """
+    kept = {
+        (row[0], row[1])
+        for row in con.execute(
+            "select table_name, column_name from duckdb_columns() "
+            "where database_name = current_database() and schema_name = 'marts'"
+        ).fetchall()
+    }
+
+    applied = 0
+    for table, comment in con.execute(
+        "select table_name, comment from duckdb_tables() "
+        "where database_name = 'source' and schema_name = 'marts' and comment is not null"
+    ).fetchall():
+        if table in tables:
+            con.execute(f"comment on table marts.{table} is {_literal(comment)}")
+            applied += 1
+
+    for table, column, comment in con.execute(
+        "select table_name, column_name, comment from duckdb_columns() "
+        "where database_name = 'source' and schema_name = 'marts' and comment is not null"
+    ).fetchall():
+        if (table, column) in kept:
+            con.execute(f'comment on column marts.{table}."{column}" is {_literal(comment)}')
+            applied += 1
+
+    return applied
+
+
+def _literal(text: str) -> str:
+    """COMMENT ON is DDL and takes no bind parameters, so the quoting is ours."""
+    return "'" + text.replace("'", "''") + "'"
+
+
 def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
     if not warehouse.exists():
         raise SystemExit(f"no warehouse at {warehouse} - run `python tasks.py build` first")
@@ -321,6 +367,8 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         con.execute(f"create table marts.{table} as {query}")
         counts[table] = con.execute(f"select count(*) from marts.{table}").fetchone()[0]
 
+    comments = _carry_comments(con, list(plan))
+
     con.execute("detach source")
     con.execute("checkpoint")
     con.close()
@@ -330,6 +378,7 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
         "first_day": first_day,
         "last_day": last_day,
         "counts": counts,
+        "comments": comments,
         "size_mb": demo.stat().st_size / 1_048_576,
     }
 
@@ -352,6 +401,8 @@ def main(argv: list[str] | None = None) -> int:
     for table, rows in sorted(result["counts"].items(), key=lambda kv: -kv[1]):
         print(f"  {table:<28}{rows:>12,}")
     print(f"  {'TOTAL':<28}{sum(result['counts'].values()):>12,}\n")
+
+    print(f"  {'comments carried':<28}{result['comments']:>12,}")
 
     for table, reason in EXCLUDED.items():
         print(f"  excluded {table}: {reason}")

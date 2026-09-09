@@ -67,9 +67,13 @@ from serving.api.schemas import (
     MetricResponse,
     QualityResponse,
     RecommendedAction,
+    Relation,
+    RelationColumn,
     ResponseMeta,
     SodaCheck,
     SourceFreshness,
+    WarehouseCatalogueResponse,
+    WarehouseRowsResponse,
 )
 
 # A page of tiles is a few hundred rows; anything larger is a caller mistake or
@@ -812,3 +816,182 @@ def health() -> dict[str, Any]:
             "ttl_seconds": warehouse.cache.ttl,
         },
     }
+
+
+# ------------------------------------------------------- the warehouse browser
+# These endpoints serve base rows rather than registry metrics, which is a
+# deliberate second thing and not a hole in gate G3. The gate says no number
+# reaches the screen that the registry never declared; it does not say an
+# analyst may never look at a stored row. What keeps the two apart is that
+# nothing here can compute an aggregate the registry does not know about - the
+# only aggregation on offer is none - and every response still carries the
+# statement that produced it, with `metric_definition` null to mark that this
+# grid is base data rather than a published figure.
+#
+# **Identifiers cannot be parameterised, so they are whitelisted instead.**
+# DuckDB binds values, never table or column names, and string-formatting a path
+# parameter into a FROM clause is the injection everybody writes once. Every
+# name below is matched against `information_schema` first and quoted second, so
+# the only identifiers that reach a statement are ones the database just said it
+# has.
+
+SYSTEM_SCHEMAS = ("information_schema", "pg_catalog")
+
+
+def _quote(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _find_relation(schema_name: str, table: str) -> str:
+    """The relation's type, or a 404 naming what was asked for.
+
+    Doubles as the whitelist check: a name that survives this has been confirmed
+    by the database, so quoting it is enough to make it safe to interpolate.
+    """
+    rows = warehouse.query(
+        "select table_type from information_schema.tables "
+        "where table_schema = ? and table_name = ?",
+        [schema_name, table],
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No relation `{schema_name}.{table}` in {warehouse.path.name}. Builds carry "
+                f"different subsets - the published slice holds marts only."
+            ),
+        )
+    return str(rows[0]["table_type"])
+
+
+def _relation_columns(schema_name: str, table: str) -> list[str]:
+    return [
+        str(r["column_name"])
+        for r in warehouse.query(
+            "select column_name from information_schema.columns "
+            "where table_schema = ? and table_name = ? order by ordinal_position",
+            [schema_name, table],
+        )
+    ]
+
+
+@app.get(
+    "/warehouse/catalogue",
+    response_model=WarehouseCatalogueResponse,
+    summary="Every relation this build actually holds",
+)
+def warehouse_catalogue() -> WarehouseCatalogueResponse:
+    """Read from the database's own metadata, not from the dbt manifest.
+
+    The manifest says what the project would build; this says what the open file
+    contains, and on the published slice those differ by a dozen relations. The
+    page needs the second one, or it offers the reader tables that are not there.
+    """
+    catalogue_sql = (
+        "select schema_name, table_name as name, 'table' as kind, "
+        "cast(estimated_size as bigint) as row_estimate, comment as note "
+        "from duckdb_tables() "
+        "union all "
+        "select schema_name, view_name, 'view', null, comment "
+        "from duckdb_views() where not internal "
+        "order by schema_name, kind desc, name"
+    )
+    relations, cached, elapsed = _serve(catalogue_sql, [])
+
+    column_rows, _, _ = _serve(
+        "select schema_name, table_name, column_name, data_type, comment "
+        "from duckdb_columns() "
+        "where schema_name not in ('information_schema', 'pg_catalog') "
+        "order by schema_name, table_name, column_index",
+        [],
+    )
+    by_relation: dict[tuple[str, str], list[RelationColumn]] = {}
+    for row in column_rows:
+        key = (row["schema_name"], row["table_name"])
+        by_relation.setdefault(key, []).append(
+            RelationColumn(
+                name=row["column_name"], type=row["data_type"], note=row["comment"] or None
+            )
+        )
+
+    data = [
+        Relation(
+            schema_name=r["schema_name"],
+            name=r["name"],
+            kind=r["kind"],
+            rows=r["row_estimate"],
+            note=r["note"] or None,
+            columns=by_relation.get((r["schema_name"], r["name"]), []),
+        )
+        for r in relations
+        if r["schema_name"] not in SYSTEM_SCHEMAS
+    ]
+    return WarehouseCatalogueResponse(
+        data=data,
+        meta=ResponseMeta(
+            sql=catalogue_sql,
+            params=[],
+            rows=len(data),
+            cached=cached,
+            generated_at=_now(),
+            elapsed_ms=round(elapsed, 2),
+            warnings=[],
+        ),
+    )
+
+
+@app.get(
+    "/warehouse/rows/{schema_name}/{table}",
+    response_model=WarehouseRowsResponse,
+    summary="A page of stored rows from one relation",
+)
+def warehouse_rows(
+    schema_name: str,
+    table: str,
+    limit: int | None = Query(default=None, ge=1, description=f"Capped at {MAX_ROWS}"),
+    offset: int = Query(default=0, ge=0),
+    order_by: str | None = Query(default=None, description="Must be a column of this relation"),
+    order_dir: str = Query(default="asc", pattern="^([aA][sS][cC]|[dD][eE][sS][cC])$"),
+) -> WarehouseRowsResponse:
+    _find_relation(schema_name, table)
+
+    clause = ""
+    if order_by:
+        if order_by not in _relation_columns(schema_name, table):
+            raise HTTPException(
+                status_code=400,
+                detail=f"`{order_by}` is not a column of {schema_name}.{table}.",
+            )
+        clause = f" order by {_quote(order_by)} {order_dir.lower()}"
+
+    size = _clamp(limit)
+    sql = (
+        f"select * from {_quote(schema_name)}.{_quote(table)}{clause} limit {size} offset {offset}"
+    )
+
+    # A staging view over parquet that is absent raises IOException, not
+    # CatalogException, so _serve's 503 does not cover it.
+    try:
+        rows, cached, elapsed = _serve(sql, [])
+    except duckdb.IOException as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"{str(exc).splitlines()[0]} - staging views read `data/raw/` through "
+                f"read_parquet(), so they resolve only where those files exist. The marts "
+                f"store their rows and are readable anywhere."
+            ),
+        ) from exc
+
+    return WarehouseRowsResponse(
+        data=rows,
+        meta=ResponseMeta(
+            sql=sql,
+            params=[],
+            rows=len(rows),
+            cached=cached,
+            generated_at=_now(),
+            elapsed_ms=round(elapsed, 2),
+            warnings=[],
+        ),
+    )

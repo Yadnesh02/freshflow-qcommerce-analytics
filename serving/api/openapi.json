@@ -767,6 +767,92 @@
         "title": "RecommendedAction",
         "type": "object"
       },
+      "Relation": {
+        "description": "One table or view, as the database reports itself rather than as dbt planned it.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/RelationColumn"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "kind": {
+            "description": "`table` or `view`.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "DuckDB's stored row estimate. Null for a view, which stores its SELECT text and no rows at all.",
+            "title": "Rows"
+          },
+          "schema_name": {
+            "title": "Schema Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_name",
+          "name",
+          "kind"
+        ],
+        "title": "Relation",
+        "type": "object"
+      },
+      "RelationColumn": {
+        "description": "One column, carrying the description dbt persisted into the file itself.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The dbt column description, read back out of the database's own COMMENT.",
+            "title": "Note"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "RelationColumn",
+        "type": "object"
+      },
       "ResponseMeta": {
         "properties": {
           "cached": {
@@ -953,6 +1039,49 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WarehouseCatalogueResponse": {
+        "description": "Everything the open warehouse holds, which is not the same set in every build.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Relation"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "WarehouseCatalogueResponse",
+        "type": "object"
+      },
+      "WarehouseRowsResponse": {
+        "description": "A page of stored rows. `meta.sql` is the statement that produced exactly this grid.",
+        "properties": {
+          "data": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "WarehouseRowsResponse",
         "type": "object"
       }
     }
@@ -1365,6 +1494,132 @@
           }
         },
         "summary": "Compute one metric"
+      }
+    },
+    "/warehouse/catalogue": {
+      "get": {
+        "description": "Read from the database's own metadata, not from the dbt manifest.\n\nThe manifest says what the project would build; this says what the open file\ncontains, and on the published slice those differ by a dozen relations. The\npage needs the second one, or it offers the reader tables that are not there.",
+        "operationId": "warehouse_catalogue_warehouse_catalogue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarehouseCatalogueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Every relation this build actually holds"
+      }
+    },
+    "/warehouse/rows/{schema_name}/{table}": {
+      "get": {
+        "operationId": "warehouse_rows_warehouse_rows__schema_name___table__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schema_name",
+            "required": true,
+            "schema": {
+              "title": "Schema Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "table",
+            "required": true,
+            "schema": {
+              "title": "Table",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Capped at 5000",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Capped at 5000",
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Must be a column of this relation",
+            "in": "query",
+            "name": "order_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Must be a column of this relation",
+              "title": "Order By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order_dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "pattern": "^([aA][sS][cC]|[dD][eE][sS][cC])$",
+              "title": "Order Dir",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarehouseRowsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A page of stored rows from one relation"
       }
     }
   }
