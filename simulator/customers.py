@@ -93,6 +93,21 @@ class CustomerBase:
         self._store_idx = self.df["_home_store_idx"].to_numpy()
         self._signup_ord = np.array([d.toordinal() for d in self.df["signup_date"]])
 
+        # --- the deal-rail holdout (task D1) ---------------------------------
+        # Drawn from its own stream, so adding a holdout shifts not one draw in
+        # the customer master that _generate already produced. Assignment is
+        # made once and never revisited: the retention effect this rail is
+        # supposed to buy accumulates over months, and a customer who moves
+        # between arms carries last month's exposure into this month's
+        # counterfactual.
+        self._holdout_share = self.cfg.deal_holdout_share
+        self._deal_response = np.array(
+            [self.cfg.raw["segments"]["deal_holdout"]["response"][n] for n in self.segment_names]
+        )
+        self._deal_exposed = np.random.default_rng([self.seed, 7002]).random(n) >= (
+            self._holdout_share
+        )
+
     # ------------------------------------------------------------------ setup
     def _generate(self, acq: dict) -> pd.DataFrame:
         rng = np.random.default_rng([self.seed, 7001])
@@ -173,6 +188,49 @@ class CustomerBase:
         active = np.flatnonzero(self.active_mask(date))
         return {si: active[self._store_idx[active] == si] for si in range(len(self.store_ids))}
 
+    def exposed_by_store(self, date: dt.date) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+        """Each store's live customers, split into deal-exposed and held out.
+
+        The pair is what makes the two demand arms assignable: units generated
+        at the deal price can only be given to someone who was allowed to see
+        the deal price, and units generated at the shelf price can only go to
+        someone who was not.
+        """
+        active = self.active_mask(date)
+        return {
+            si: (
+                np.flatnonzero(active & (self._store_idx == si) & self._deal_exposed),
+                np.flatnonzero(active & (self._store_idx == si) & ~self._deal_exposed),
+            )
+            for si in range(len(self.store_ids))
+        }
+
+    def deal_response_by_store(self, date: dt.date) -> np.ndarray:
+        """Per store, the exposed arm's mean response to a live slot.
+
+        A store whose live customers are mostly `convenience` barely moves when
+        the rail runs; one carrying the deal_hunter tail moves a lot. Averaging
+        over the exposed population is what turns five per-segment numbers into
+        the one scalar the demand surface can be scaled by - the heterogeneity
+        itself is preserved downstream, where the assembler decides which of
+        those customers the extra baskets actually land on.
+        """
+        active = self.active_mask(date) & self._deal_exposed
+        out = np.ones(len(self.store_ids))
+        for si in range(len(self.store_ids)):
+            here = active & (self._store_idx == si)
+            if here.any():
+                out[si] = float(self._deal_response[self._segment_idx[here]].mean())
+        return out
+
+    def segment_response(self) -> np.ndarray:
+        """Per-segment response, for weighting which customers get the extra baskets."""
+        return self._deal_response
+
+    def exposed_share(self) -> float:
+        """The realised treated fraction, which is not exactly 1 - share."""
+        return float(self._deal_exposed.mean())
+
     # ------------------------------------------------------------------ events
     def record(self, kind: str, customer_rows: np.ndarray) -> None:
         """Log an experience that will move this month's churn hazard."""
@@ -237,6 +295,25 @@ class CustomerBase:
         out = self.df.drop(columns=[c for c in self.df.columns if c.startswith("_")])
         return out.assign(churn_date=self._churn_date)
 
+    def to_exposure_bronze(self) -> pd.DataFrame:
+        """The holdout assignment as its own feed, the way a CRM would log it.
+
+        A separate feed rather than a column on the customer snapshot, because
+        that snapshot is monthly and an assignment is a one-time event. Keeping
+        them apart is also what lets the warehouse join exposure to orders
+        without the join silently picking up a customer's attributes as of the
+        wrong month.
+        """
+        start, _ = self.cfg.window
+        return pd.DataFrame(
+            {
+                "customer_id": self.df["customer_id"].to_numpy(),
+                "deal_arm": np.where(self._deal_exposed, "exposed", "holdout"),
+                "assigned_date": start,
+                "holdout_share": self._holdout_share,
+            }
+        )
+
 
 # =============================================================== baskets
 @dataclass
@@ -290,6 +367,7 @@ class BasketAssembler:
         active_rows: np.ndarray,
         rng: np.random.Generator,
         is_monsoon: bool = False,
+        appetite_tilt: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Build one store's orders for one day from its sampled unit demand."""
         sold = np.flatnonzero(units > 0)
@@ -304,6 +382,12 @@ class BasketAssembler:
         seg_of = self.customers._segment_idx[active_rows]
         seg_counts = np.bincount(seg_of, minlength=len(self._order_rate))
         seg_appetite = seg_counts * self._order_rate
+        if appetite_tilt is not None:
+            # On a day the rail is live, the extra volume is not spread evenly
+            # over the exposed arm - it concentrates in the segments that
+            # actually respond. Without this the uplift model would find one
+            # average effect and nothing to rank customers by.
+            seg_appetite = seg_appetite * appetite_tilt
         if seg_appetite.sum() == 0:
             return _empty_orders(), _empty_items()
         seg_share = seg_appetite / seg_appetite.sum()

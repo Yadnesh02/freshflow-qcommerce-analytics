@@ -341,6 +341,9 @@ class SimulationRun:
     # policy gets its own stream too, so a policy that starts drawing cannot
     # move demand - which is a violation that would otherwise be invisible.
     DEMAND, BASKETS, FULFIL, CLICKS, SUPPLY, POLICY, CHURN = 101, 102, 103, 104, 105, 106, 107
+    # The held-out arm samples its own demand, so the treated arm's draws stay
+    # exactly where they were and the two arms cannot consume each other's.
+    DEMAND_HOLDOUT = 108
 
     def _substream(self, ordinal: int, component: int) -> np.random.Generator:
         """One component's generator for one day. Independent of every other."""
@@ -423,6 +426,7 @@ class SimulationRun:
         click_rng = self._substream(ord_, self.CLICKS)
         supply_rng = self._substream(ord_, self.SUPPLY)
         policy_rng = self._substream(ord_, self.POLICY)
+        holdout_rng = self._substream(ord_, self.DEMAND_HOLDOUT)
 
         ctx = PolicyContext(
             date=day,
@@ -437,18 +441,40 @@ class SimulationRun:
         discount = self.policy.markdown(ctx)
         deals = self.policy.deal_slots(ctx)
         price = self._day_prices(discount, deals)
+        # the same day without the rail - what the held-out arm actually pays,
+        # and the counterfactual the uplift model is estimated against
+        price_std = self._day_prices(discount, {})
 
         # --- 4. demand responds to price and to freshness ---------------------
         lam = self.demand.daily_lambda(day)
-        ratio = np.clip(price / self.base_price[None, :], 0.05, 3.0)
-        lam = lam * price_multiplier(ratio, self.elasticity[None, :])
         # freshness aversion keys on the stock-weighted average, not the
         # soonest-expiring unit - see InventoryLedger.weighted_dte_matrix
         avg_dte = self.ledger.weighted_dte_matrix(ord_)
         remaining = np.clip(avg_dte / np.maximum(self.shelf_life, 1)[None, :], 0.0, 1.0)
-        lam = lam * np.where(avg_dte < 9999, freshness_multiplier(remaining, self.cfg), 1.0)
+        fresh = np.where(avg_dte < 9999, freshness_multiplier(remaining, self.cfg), 1.0)
 
-        units = self.demand.sample(lam, demand_rng)
+        def _lam_at(shelf: np.ndarray) -> np.ndarray:
+            ratio = np.clip(shelf / self.base_price[None, :], 0.05, 3.0)
+            return lam * price_multiplier(ratio, self.elasticity[None, :]) * fresh
+
+        # Two arms, because the rail is visible to only one of them (task D1).
+        # The held-out share sees the shelf price and responds to that; everyone
+        # else sees the deal. On a SKU with no slot today the two surfaces are
+        # identical, so the arms sum to exactly the demand this drew before the
+        # split existed - the holdout costs nothing where the rail is not running.
+        exposed_share = self.customers.exposed_share()
+
+        # A slot does not only move the dealt SKU. It is a reason to open the
+        # app, and the basket that follows is mostly the customer's usual one -
+        # which is the attach effect this project exists to measure. So on a day
+        # with a live slot the exposed arm's whole demand surface lifts, by the
+        # mean response of the customers who can actually see it.
+        slot_live = np.array([len(deals.get(si, [])) > 0 for si in range(self.S)])
+        lift = np.where(slot_live, self.customers.deal_response_by_store(day), 1.0)[:, None]
+
+        units_exposed = self.demand.sample(_lam_at(price) * exposed_share * lift, demand_rng)
+        units_holdout = self.demand.sample(_lam_at(price_std) * (1.0 - exposed_share), holdout_rng)
+        units = units_exposed + units_holdout
         c.units_demanded = int(units.sum())
 
         # start today's sales slice clean, or a store that sold nothing would
@@ -458,16 +484,34 @@ class SimulationRun:
         self._instock_history[slot] = True
 
         # --- 5. baskets, then fulfilment against real batches -----------------
-        by_store = self.customers.active_by_store(day)
+        arms = self.customers.exposed_by_store(day)
         is_monsoon = self.demand.factors[day].is_monsoon
         order_frames, item_frames, stockout_rows, click_rows = [], [], [], []
 
         for si in range(self.S):
             if not store_open[si]:
                 continue
-            orders, items = self.baskets.assemble(
-                si, units[si], day, by_store[si], basket_rng, is_monsoon=is_monsoon
+            exposed_rows, holdout_rows = arms[si]
+            treated_orders, treated_items = self.baskets.assemble(
+                si,
+                units_exposed[si],
+                day,
+                exposed_rows,
+                basket_rng,
+                is_monsoon=is_monsoon,
+                appetite_tilt=(self.customers.segment_response() if slot_live[si] else None),
             )
+            held_orders, held_items = self.baskets.assemble(
+                si, units_holdout[si], day, holdout_rows, basket_rng, is_monsoon=is_monsoon
+            )
+            orders = pd.concat(
+                [
+                    treated_orders.assign(deal_exposed=True),
+                    held_orders.assign(deal_exposed=False),
+                ],
+                ignore_index=True,
+            )
+            items = pd.concat([treated_items, held_items], ignore_index=True)
             if orders.empty:
                 continue
 
@@ -485,6 +529,7 @@ class SimulationRun:
 
             hour_of = dict(zip(orders["order_id"], orders["order_ts"], strict=True))
             cust_of = dict(zip(orders["order_id"], orders["customer_row"], strict=True))
+            exposed_of = dict(zip(orders["order_id"], orders["deal_exposed"], strict=True))
             lines, first_out = [], {}
 
             for oid, sku_idx, qty in zip(
@@ -504,7 +549,11 @@ class SimulationRun:
                 for sold_sku, a in allocs:
                     if sold_sku != sku_idx:
                         c.units_substituted += a.qty
-                    unit_price = float(price[si, sold_sku])
+                    # The rail prices only for the arm that can see it. A
+                    # held-out customer buying the dealt SKU pays the shelf
+                    # price, which is exactly the counterfactual D4 needs.
+                    on_deal = bool(exposed_of[oid]) and sold_sku in deals.get(si, [])
+                    unit_price = float((price if on_deal else price_std)[si, sold_sku])
                     cost = self.ledger.batch_cost(a.batch_row)
                     lines.append(
                         (
@@ -517,7 +566,7 @@ class SimulationRun:
                             round(float(self.base_price[sold_sku]) - unit_price, 2),
                             round(cost, 2),
                             a.dte_at_sale,
-                            _promo_id(discount[si, sold_sku], sold_sku in deals.get(si, [])),
+                            _promo_id(discount[si, sold_sku], on_deal),
                             sold_sku != sku_idx,
                         )
                     )
@@ -537,7 +586,7 @@ class SimulationRun:
                     per_store["markdown_subsidy"][si] += given_away
                     if a.shelf_life_fraction < LOW_DTE_FRACTION:
                         self.customers.record("low_dte", np.array([cust]))
-                    if _promo_id(discount[si, sold_sku], sold_sku in deals.get(si, [])):
+                    if _promo_id(discount[si, sold_sku], on_deal):
                         self.customers.record("deal", np.array([cust]))
 
             if not lines:
@@ -593,7 +642,7 @@ class SimulationRun:
             out = orders.assign(
                 store_id=self.store_ids[si],
                 customer_id=self.customers.df["customer_id"].to_numpy()[orders["customer_row"]],
-            ).drop(columns=["customer_row", "store_idx"])
+            ).drop(columns=["customer_row", "store_idx", "deal_exposed"])
             order_frames.append(out)
             item_frames.append(item_df)
 
@@ -757,6 +806,7 @@ class SimulationRun:
 
     def _write_reference(self) -> None:
         day = sorted(self.demand.factors)[0]
+        self._write("crm_deal_exposure", day, self.customers.to_exposure_bronze())
         self._write("ref_stores", day, pd.DataFrame(self.cfg.stores))
         self._write(
             "ref_suppliers",

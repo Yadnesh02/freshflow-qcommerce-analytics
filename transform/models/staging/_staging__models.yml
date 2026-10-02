@@ -413,6 +413,30 @@ models:
         data_tests:
           - not_null
 
+  - name: stg_crm__deal_exposure
+    description: >
+      The deal rail's permanent customer-level holdout (D1). One row per
+      customer, assigned once. `customer_id` is unique here in a way it is not
+      in stg_crm__customers, which is snapshotted monthly - that difference is
+      the whole reason this is a separate feed rather than a column on that one.
+    columns:
+      - name: customer_id
+        data_tests:
+          - not_null
+          - unique
+      - name: deal_arm
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["exposed", "holdout"]
+      - name: is_deal_exposed
+        data_tests:
+          - not_null
+      - name: holdout_share
+        data_tests:
+          - not_null
+
   - name: stg_crm__customers
     description: >
       Customer master, one row per customer per monthly snapshot. Every

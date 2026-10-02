@@ -72,8 +72,8 @@ unanswered question in it turned out to be.
 | Track | Scope | State |
 |---|---|---|
 | **Platform** · sprints 0–5 | Simulator, warehouse, decision engines, metric registry, live app, impact proof | ✅ complete — all five gates pass |
-| **D0** | Re-headline: README, the question, the plan | 🚧 in progress |
-| **D1** | Customer-level randomised deal exposure in the simulator | ⬜ not started |
+| **D0** | Re-headline: README, the question, the plan | ✅ done |
+| **D1** | Customer-level randomised deal exposure in the simulator | ✅ done — max SMD 0.028, no deal line reaches the holdout |
 | **D2** | Causal attach estimate + cannibalisation event study | ⬜ not started |
 | **D3** | Retention readout — difference-in-differences on 90-day retention | ⬜ not started |
 | **D4** | Uplift model, Qini curve, targeting policy | ⬜ not started |

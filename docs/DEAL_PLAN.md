@@ -152,12 +152,18 @@ did not.
 | # | Sprint | Gate | Est |
 |---|---|---|---|
 | **D0** | Re-headline: README, the question, this plan | A reader lands on the repo and can state the question in one sentence | 0.5d |
-| **D1** | Customer-level randomised deal exposure in the simulator | Covariate balance holds — standardised mean difference < 0.10 across RFM features between exposed and control | 1d |
+| **D1** | Customer-level randomised deal exposure in the simulator | Covariate balance holds — standardised mean difference < 0.10 across **pre-treatment** attributes between exposed and control, and no deal-priced line ever reaches a held-out customer | 1d |
 | **D2** | Causal attach + cannibalisation event study | Attach is reported with a confidence interval and stated against the naive +₹6.27, whether it moves or not. The P&L reconciliation of §2 is resolved | 1.5d |
 | **D3** | Retention readout — DiD on 90-day retention | `retention_90d` stops returning null, and parallel trends is checked on the 45-day pre-period rather than asserted | 1d |
 | **D4** | Uplift model, Qini, targeting policy | Beats random targeting on Qini on a held-out set. If it does not, that is the finding and it is reported | 2d |
 | **D5** | Allocator re-pointed at measured coefficients | The deal P&L reconciles end to end: subsidy + cannibalisation against attach + retention, with no unexplained residual | 0.5d |
 | **D6** | Three-page dashboard, README, the 60-second story | Each page answers its question above the fold | 1.5d |
+
+> **A correction to this gate, made while building it.** It originally read "across RFM features".
+> That was wrong: recency and frequency are exactly what the rail is supposed to move, so requiring
+> them to balance *after* exposure would be requiring the treatment not to work. Balance belongs on
+> attributes fixed before assignment — segment, home store, signup date, membership. The realised
+> figures are max SMD **0.0283** across those four, on a 39,074 / 9,696 split.
 
 ### One hard dependency
 

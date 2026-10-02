@@ -84,6 +84,11 @@ class SimConfig:
         raise KeyError(f"unknown category '{l1}'")
 
     @property
+    def deal_holdout_share(self) -> float:
+        """Fraction of customers permanently excluded from the deal rail (D1)."""
+        return float(self.raw["segments"]["deal_holdout"]["share"])
+
+    @property
     def category_names(self) -> set[str]:
         return {c.l1 for c in self.categories}
 
@@ -326,6 +331,25 @@ def _validate_segments(seg_doc: dict[str, Any], category_names: set[str]) -> Non
             raise ConfigError(f"churn hazard for '{name}' is {h}, expected between 0 and 1")
 
     _check_shares(seg_doc["acquisition"]["channel_mix"], "acquisition channel_mix")
+
+    # The deal holdout has to leave a usable control group and a usable treated
+    # group. A share of 0 is no experiment at all; above a half the rail is off
+    # for most of the estate, which is a different intervention from the one
+    # being measured.
+    response = seg_doc["deal_holdout"]["response"]
+    missing = names - set(response)
+    if missing:
+        raise ConfigError(f"segments with no deal response defined: {sorted(missing)}")
+    for name, r in response.items():
+        if not 0 < r < 3:
+            raise ConfigError(f"deal response for '{name}' is {r}, expected between 0 and 3")
+
+    share = seg_doc["deal_holdout"]["share"]
+    if not 0 < share <= 0.5:
+        raise ConfigError(
+            f"deal_holdout.share is {share}, expected between 0 and 0.5 - a holdout of none "
+            f"leaves nothing to compare against, and one above a half stops being a holdout"
+        )
 
 
 def _validate_suppliers(

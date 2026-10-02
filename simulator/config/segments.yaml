@@ -139,3 +139,51 @@ acquisition:
     paid_social: 0.28
     referral: 0.21
     app_store: 0.17
+
+# -----------------------------------------------------------------------------
+# Deal rail holdout (task D1)
+# -----------------------------------------------------------------------------
+# A permanent, customer-level control group that never sees the Rs 11 rail.
+#
+# The experiment machinery in sprint 5 randomises STORES, which answers "what
+# if we rolled this out to half the estate". It cannot answer "who is this
+# worth showing to", because every customer in a treated store is treated. An
+# uplift model needs a control group at the grain the decision is made at, and
+# the decision here is made per customer.
+#
+# 20% is the usual shape of a growth-team global holdout: large enough that a
+# per-decile uplift estimate has customers in every decile, small enough that
+# the rail still does its job on the other four fifths. It is deliberately
+# PERMANENT rather than re-randomised each day - a customer who dips in and out
+# of the control group carries deal exposure from last week into this week's
+# counterfactual, and the retention effect this rail is supposed to buy takes
+# longer than a day to show up.
+deal_holdout:
+  share: 0.20
+
+  # How much more likely an exposed customer is to order at all on a day their
+  # store runs a slot. THIS IS THE GROUND TRUTH D4 HAS TO RECOVER WITHOUT BEING
+  # TOLD, which is why it lives here and why `_segment_idx` is stripped before
+  # anything is emitted: the uplift model sees RFM, recency and discount
+  # dependency, never the segment that generated them.
+  #
+  # Deliberately heterogeneous, because a uniform response makes uplift
+  # modelling pointless - if everyone moves the same amount, targeting the top
+  # decile is worth nothing and the whole chapter collapses to an average. The
+  # spread below maps onto the four cells the plan names:
+  #
+  #   deal_hunter, price_sensitive   persuadables - they come for the rail
+  #   bulk_planner                   mild; they were coming this week anyway
+  #   convenience                    sure things - they order for speed, not price
+  #   premium                        sleeping dogs - a rupee rail is not why
+  #                                  they are here, and leaning on it slightly
+  #                                  cheapens the proposition
+  #
+  # A value below 1.0 is not a rounding artefact. It is the effect every deal
+  # programme claims does not exist and every holdout eventually finds.
+  response:
+    deal_hunter: 1.55
+    price_sensitive: 1.30
+    bulk_planner: 1.10
+    convenience: 1.02
+    premium: 0.98

@@ -117,6 +117,17 @@ sources:
     tables:
       - name: customer_snapshot
         description: "One row per customer per monthly snapshot, with churn date if known."
+      - name: crm_deal_exposure
+        description: >
+          The deal rail's permanent customer-level holdout (D1). One row per
+          customer, assigned once at the start of the window and never revised,
+          because a customer who moves between arms carries last month's
+          exposure into this month's counterfactual.
+        columns:
+          - name: deal_arm
+            description: "`exposed` or `holdout`. The holdout never sees the Rs 11 price."
+          - name: holdout_share
+            description: "The share the assignment targeted, carried so a build documents its own design."
 
   - name: ref
     description: "Reference data. Small, slow-moving, emitted once."
