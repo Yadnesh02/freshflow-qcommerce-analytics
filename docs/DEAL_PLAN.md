@@ -155,7 +155,7 @@ did not.
 | **D0** | Re-headline: README, the question, this plan | A reader lands on the repo and can state the question in one sentence | 0.5d |
 | **D1** | Customer-level randomised deal exposure in the simulator | Covariate balance holds — standardised mean difference < 0.10 across **pre-treatment** attributes between exposed and control, and no deal-priced line ever reaches a held-out customer | 1d |
 | **D2** | Causal attach + cannibalisation event study | ✅ Attach reported with a CI against the naive figure; P&L reconciliation resolved. **Full-year numbers need a post-D1 warehouse rebuild** | 1.5d |
-| **D3** | Retention readout — DiD on 90-day retention | `retention_90d` stops returning null, and parallel trends is checked on the 45-day pre-period rather than asserted | 1d |
+| **D3** | Retention readout against D1's holdout | ✅ Retention measured with a CI and an MDE beside it; the mechanism behind the sign is identified rather than asserted | 1d |
 | **D4** | Uplift model, Qini, targeting policy | Beats random targeting on Qini on a held-out set. If it does not, that is the finding and it is reported | 2d |
 | **D5** | Allocator re-pointed at measured coefficients | The deal P&L reconciles end to end: subsidy + cannibalisation against attach + retention, with no unexplained residual | 0.5d |
 | **D6** | Three-page dashboard, README, the 60-second story | Each page answers its question above the fold | 1.5d |
@@ -202,6 +202,49 @@ surrounding fortnight, and the days after a block are flat — which argues agai
 > truly marginal rail is not reachable while `slots_per_store` is 1: the subsidy is ~₹3 a customer,
 > so getting to 1× needs a 25-fold shrink that makes the effect statistically invisible. Widening
 > the rail means changing the sprint 5 control arm, which would invalidate its published table.
+
+### What D3 found, and a second gate correction
+
+**The rail costs retention rather than buying it**, and the mechanism is the finding.
+
+| outcome, per assigned customer | exposed | holdout | diff | 95% CI |
+|---|---|---|---|---|
+| Churned | 10.96% | 9.90% | **+1.06 pp** | [+0.38, +1.73] |
+| Active in the last 30 days | 50.99% | 52.12% | **−1.14 pp** | [−2.25, −0.03] |
+| Stockout-affected days | 1.089 | 0.936 | **+0.153** | [+0.123, +0.182] |
+
+Minimum detectable effect on churn is 0.96 pp at 80% power, so the +1.06 pp sits
+just above the floor this design can see — reported next to the estimate rather than left implied.
+
+Redemption does lower hazard: the simulator applies 0.93 per redemption and redeemers churn at
+7.94% against the holdout's 9.90%. But only 6.25% of exposed customers ever redeem, while **all**
+of them get the demand lift — which concentrates onto a handful of dealt SKUs that then run dry.
+`stockout_on_favourite_sku` is the largest term in the churn model. **The rail buys redemptions and
+spends availability, and the second costs more than the first.**
+
+That chain runs entirely through the simulator's pre-existing hazard logic. None of it was added
+for this chapter.
+
+> **Two gate corrections, both the same mistake.** This gate said "parallel trends is checked on the
+> 45-day pre-period", which belongs to the *store-level* Policy A/B holdout. D1's holdout randomises
+> customers from day one, so there is no pre-period and parallel trends is not an assumption it
+> needs — randomisation does that work. The gate also said `retention_90d` stops returning null;
+> that column lives in `mart_experiment_readout` and belongs to the Policy A/B experiment, which is
+> a different question and **stays open**. Both gates were written before D1 existed, which is the
+> same reason D1's own balance gate named RFM.
+
+> **No CACE, and the reason is worth more than the number.** The holdout's redemption rate is
+> exactly zero, so a Wald ratio looks ideal. It is not: exposure reaches churn through availability
+> as well as through redemption, so the exclusion restriction fails by construction. Exposed
+> customers who never redeemed still carry 1.0094 stockout days against the holdout's 0.9364.
+> Dividing by compliance anyway would have reported **+16.88 pp** and attributed an arm-wide effect
+> to the 6.25% who took the deal. The module keeps that number visible next to the reason it is
+> unusable, so the next person does not recompute it.
+
+**This sharpens D4 rather than blocking it.** D2 says the rail returns 4.66× on margin inside the
+window; D3 says it costs retention beyond it. Targeting is now the question of *which customers the
+margin gain outruns the churn cost for* — which is a far better brief for an uplift model than
+"find the responders".
 
 ### One hard dependency
 

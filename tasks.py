@@ -200,6 +200,7 @@ def t_recommend(args: argparse.Namespace) -> int:
         t_deal_pnl,
         t_deal_attach,
         t_deal_cannibalisation,
+        t_deal_retention,
         t_deal_slots,
         t_transfers,
         t_newsvendor,
@@ -364,6 +365,11 @@ def t_deal_cannibalisation(_: argparse.Namespace) -> int:
     return py("-m", "analytics.deal.cannibalisation")
 
 
+def t_deal_retention(_: argparse.Namespace) -> int:
+    """What the rail buys in retention, against its own holdout."""
+    return py("-m", "analytics.deal.retention")
+
+
 def t_deal_slots(args: argparse.Namespace) -> int:
     """Allocate the Rs 11 deal slots per store-day with the constraint program."""
     return py(
@@ -510,6 +516,7 @@ TARGETS = {
     "deal-pnl": t_deal_pnl,
     "deal-attach": t_deal_attach,
     "deal-cannibalisation": t_deal_cannibalisation,
+    "deal-retention": t_deal_retention,
     "deal-slots": t_deal_slots,
     "transfers": t_transfers,
     "newsvendor": t_newsvendor,

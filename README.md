@@ -43,6 +43,10 @@ reason this project exists.**
 | **It reactivates, it does not acquire** | A deal order is **2.1×** more likely to be a customer returning after a 30-day gap (5.31% against 2.48%), and 2.4× at 60 days. First-*ever* orders are slightly **lower** on deal days. |
 | **What it earns back** | **4.66× per rupee of subsidy, CI [0.30×, 9.02×]** — measured against a randomised customer-level holdout (D1), on a 90-day validation build. The interval crosses 1×, so on that window the rail cannot yet be shown to pay for itself. The naive observational figure the code used to rely on was +₹6.27 per deal order, which is a different quantity: attach only, with no incidence effect in it. |
 
+The two sit in tension, which is the point: **the rail makes margin inside the window and
+costs customers beyond it.** Whether it pays depends on who sees it, which is what D4 exists
+to answer.
+
 There is one more finding worth keeping, because it is the opening the project walks through:
 **the rail is run as a gimmick rather than a system.** More than half the slots over the year went
 to goods with roughly 800 days of shelf life, where clearance value is exactly zero. On the as-of
@@ -53,7 +57,7 @@ date, the set of dealt SKUs and the set of SKUs at risk of expiring had an **emp
 | | Gap | Where it stands today |
 |---|---|---|
 | ~~**G1**~~ | ~~The attach number is not causal~~ | **Closed in D2.** [`analytics/deal/attach.py`](analytics/deal/attach.py) estimates it intent-to-treat against D1's randomised holdout, customers who never ordered included as zeros. Full-year figures await a post-D1 warehouse rebuild. |
-| **G2** | Retention value is set to zero | `reactivation_value` is a declared parameter defaulting to **0**, and `retention_90d` comes back `None` in `mart_experiment_readout`. The thing the rail exists to buy is valued at nothing and measured not at all. |
+| ~~**G2**~~ | ~~Retention value is set to zero~~ | **Closed in D3** — and the answer is negative. Exposed customers churn **+1.06pp** more [+0.38, +1.73], because the rail concentrates demand onto SKUs that then run dry: stockout-affected days rise 16%. `reactivation_value` must not be set positive on this evidence. (`retention_90d` in `mart_experiment_readout` belongs to the *store-level* Policy A/B experiment and stays open.) |
 | **G3** | Nobody is targeted | Slots are allocated store × SKU × day. There is no *who*. Every feature needed is already in `mart_customer_360` — RFM, cohort, discount-dependency index, 90-day contribution — and no model uses them. |
 
 Closing those three is the work. **[The plan is here](docs/DEAL_PLAN.md)**: four analytical chapters,
@@ -75,7 +79,7 @@ unanswered question in it turned out to be.
 | **D0** | Re-headline: README, the question, the plan | ✅ done |
 | **D1** | Customer-level randomised deal exposure in the simulator | ✅ done — max SMD 0.028, no deal line reaches the holdout |
 | **D2** | Causal attach estimate + cannibalisation event study | ✅ done — 4.66× return [0.30×, 9.02×]; P&L corrected to −₹436,771 |
-| **D3** | Retention readout — difference-in-differences on 90-day retention | ⬜ not started |
+| **D3** | Retention readout against D1's holdout | ✅ done — the rail **costs** retention: +1.06pp churn [+0.38, +1.73], via stockouts |
 | **D4** | Uplift model, Qini curve, targeting policy | ⬜ not started |
 | **D5** | Deal-slot allocator re-pointed at measured coefficients | ⬜ not started |
 | **D6** | Three-page dashboard, rewritten story | ⬜ not started |

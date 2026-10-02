@@ -190,3 +190,63 @@ def test_attach_refuses_a_build_with_no_control_group(con) -> None:
     else:
         with pytest.raises(ValueError, match="one arm is empty"):
             itt_effects(frame)
+
+
+# ================================================== retention
+def test_the_holdout_never_redeems(con) -> None:
+    """One-sided non-compliance, which is a fact about the price surface.
+
+    A held-out customer could not have taken the deal if they had wanted to -
+    they were never shown the price. This is what makes the compliance rate
+    interpretable; it is NOT what makes an instrumental variable valid, which
+    is a different condition and one that fails here.
+    """
+    from analytics.deal.retention import outcomes
+
+    try:
+        frame = outcomes(con)
+    except (duckdb.CatalogException, ValueError):
+        pytest.skip("this build predates the D1 holdout")
+
+    held = frame[frame["deal_arm"] == "holdout"]
+    assert held["redeemed"].sum() == 0, (
+        f"{int(held['redeemed'].sum())} held-out customers redeemed. The control arm is "
+        f"contaminated and every retention estimate from this build is a blend."
+    )
+
+
+def test_exposure_reaches_churn_without_redemption(con) -> None:
+    """Why no CACE is reported, checked rather than asserted in a comment.
+
+    If exposed customers who never redeemed looked exactly like the holdout, the
+    exclusion restriction would be defensible and a Wald ratio would estimate
+    the effect on redeemers. They do not: the rail concentrates demand onto a
+    few SKUs which then run dry, and that reaches everyone near it.
+    """
+    from analytics.deal.retention import exclusion_fails, outcomes
+
+    try:
+        frame = outcomes(con)
+    except (duckdb.CatalogException, ValueError):
+        pytest.skip("this build predates the D1 holdout")
+
+    never, held = exclusion_fails(frame)
+    assert never > held, (
+        f"exposed non-redeemers carry {never:.4f} stockout days against the holdout's "
+        f"{held:.4f}. If this ever reverses, revisit whether a CACE is available."
+    )
+
+
+def test_every_retention_estimate_carries_a_detectable_floor(con) -> None:
+    """A null with no MDE beside it is a shrug, not a result."""
+    from analytics.deal.retention import _compare, outcomes
+
+    try:
+        frame = outcomes(con)
+    except (duckdb.CatalogException, ValueError):
+        pytest.skip("this build predates the D1 holdout")
+
+    for column in ("churned", "active_recent"):
+        estimate = _compare(frame, column)
+        assert estimate.mde > 0
+        assert estimate.ci_low <= estimate.diff <= estimate.ci_high
