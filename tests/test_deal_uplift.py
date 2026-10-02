@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from analytics.deal.uplift import PANEL, qini
@@ -194,4 +195,86 @@ def test_the_effect_is_there_even_though_no_estimator_finds_it() -> None:
         f"even with the true segment the Qini is {result.coefficient:,.0f}. If this ever "
         f"fails, the heterogeneity has gone out of the simulation and D4's null stops "
         f"being a statement about estimators."
+    )
+
+
+# ================================================== the causal tree
+def test_the_causal_tree_recovers_known_heterogeneity() -> None:
+    """Synthetic ground truth, because the real data cannot confirm a method.
+
+    The effect is +30 above a threshold and -30 below it, on a feature the tree
+    has to find among noise. If it cannot recover that, its result on the real
+    panel is not evidence of anything.
+    """
+    from analytics.deal.causal_tree import CausalTree
+
+    rng = np.random.default_rng(0)
+    n = 20_000
+    x0, x1 = rng.random(n), rng.random(n)
+    treated = (rng.random(n) < 0.8).astype(int)
+    outcome = rng.normal(100, 20, n) + treated * np.where(x0 > 0.5, 30.0, -30.0)
+    frame = pd.DataFrame({"x0": x0, "x1": x1, "treated": treated, "y": outcome})
+
+    tree = CausalTree(features=["x0", "x1"]).fit(frame, "y")
+    assert tree.root.feature == "x0", f"split on {tree.root.feature}, not the feature that matters"
+    assert abs(tree.root.threshold - 0.5) < 0.1
+
+    predicted = tree.predict(frame)
+    assert predicted[x0 > 0.5].mean() > 20
+    assert predicted[x0 <= 0.5].mean() < -20
+
+
+def test_no_leaf_is_ever_single_armed() -> None:
+    """A leaf without controls has a treated mean, not an effect.
+
+    That is the failure that would make this look like it worked: leaves carved
+    so fine that one arm vanishes report the outcome level as if it were uplift.
+    """
+    from analytics.deal.causal_tree import CausalTree
+
+    rng = np.random.default_rng(3)
+    n = 8_000
+    frame = pd.DataFrame(
+        {
+            "a": rng.random(n),
+            "b": rng.random(n),
+            "treated": (rng.random(n) < 0.8).astype(int),
+            "y": rng.normal(50, 10, n),
+        }
+    )
+    tree = CausalTree(features=["a", "b"]).fit(frame, "y")
+    for leaf in tree.leaves():
+        assert leaf.n_treated > 0 and leaf.n_control > 0, (
+            f"leaf with n_treated={leaf.n_treated}, n_control={leaf.n_control} - "
+            f"its 'effect' has no counterfactual behind it"
+        )
+
+
+def test_honest_estimation_does_not_reuse_the_structure_rows() -> None:
+    """On pure noise the honest effects must collapse toward zero.
+
+    An ordinary tree would carve leaves whose apparent effects are artefacts of
+    the very rows that chose the split, and report them confidently. Splitting
+    the sample is what stops that, so this is the test that the honesty is real
+    rather than described in a docstring.
+    """
+    from analytics.deal.causal_tree import CausalTree
+
+    rng = np.random.default_rng(11)
+    n = 12_000
+    frame = pd.DataFrame(
+        {
+            "a": rng.random(n),
+            "b": rng.random(n),
+            "treated": (rng.random(n) < 0.8).astype(int),
+            "y": rng.normal(100, 25, n),  # no effect at all
+        }
+    )
+    tree = CausalTree(features=["a", "b"]).fit(frame, "y")
+    effects = np.array([leaf.effect for leaf in tree.leaves()])
+    # 25 / sqrt(~150 controls) is about 2, so honest leaves should sit well
+    # inside a few rupees rather than at the double digits a greedy fit finds.
+    assert abs(effects).max() < 10.0, (
+        f"largest honest leaf effect on pure noise is {abs(effects).max():.1f} - "
+        f"the estimation half is not independent of the structure half"
     )

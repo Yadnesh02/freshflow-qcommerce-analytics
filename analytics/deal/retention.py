@@ -77,11 +77,17 @@ ACTIVE_WINDOW_DAYS = 30
 Z_ALPHA, Z_BETA = 1.96, 0.84
 
 OUTCOMES = f"""
-with bounds as (select max(date_day) as last_day from marts.fct_order_item),
+-- Everything here is bounded by the assignment date, which the D4 burn-in made
+-- necessary. The rail runs for the whole base during the burn-in, so customers
+-- later assigned to the holdout DID redeem before the arms existed. Counting
+-- those puts the control arm's redemption rate above zero and makes both the
+-- compliance figure and the exclusion argument resting on it wrong.
+with assign as (select max(assigned_date) as d from staging.stg_crm__deal_exposure),
+bounds as (select max(date_day) as last_day from marts.fct_order_item),
 redeemed as (
-    select distinct customer_id
-    from marts.fct_order_item
-    where promo_id = '{DEAL_PROMO_ID}'
+    select distinct i.customer_id
+    from marts.fct_order_item i, assign a
+    where i.promo_id = '{DEAL_PROMO_ID}' and i.date_day >= a.d
 ),
 recent as (
     select distinct i.customer_id
@@ -91,22 +97,23 @@ recent as (
 stockouts as (
     select i.customer_id, count(distinct i.date_day) as stockout_days
     from marts.fct_order_item i
-    join marts.agg_store_sku_day a
-      on a.store_id = i.store_id and a.sku_id = i.sku_id and a.date_day = i.date_day
-    where a.is_censored
+    join marts.agg_store_sku_day s
+      on s.store_id = i.store_id and s.sku_id = i.sku_id and s.date_day = i.date_day
+    cross join assign a
+    where s.is_censored and i.date_day >= a.d
     group by 1
 )
 select
     e.deal_arm,
     e.customer_id,
-    case when r.customer_id is null then 0 else 1 end          as redeemed,
-    case when c.churn_date is null then 0 else 1 end           as churned,
-    case when a.customer_id is null then 0 else 1 end          as active_recent,
-    coalesce(s.stockout_days, 0)                               as stockout_days
+    case when r.customer_id is null then 0 else 1 end as redeemed,
+    case when c.churn_date is null then 0 else 1 end  as churned,
+    case when n.customer_id is null then 0 else 1 end as active_recent,
+    coalesce(s.stockout_days, 0)                      as stockout_days
 from staging.stg_crm__deal_exposure e
 join marts.dim_customer c using (customer_id)
-left join redeemed r on r.customer_id = e.customer_id
-left join recent   a on a.customer_id = e.customer_id
+left join redeemed  r on r.customer_id = e.customer_id
+left join recent    n on n.customer_id = e.customer_id
 left join stockouts s on s.customer_id = e.customer_id
 """
 

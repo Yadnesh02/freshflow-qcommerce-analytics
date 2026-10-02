@@ -321,6 +321,60 @@ than on outcome variance or feature-space variance — has not been tried.
 
 That is where this chapter stops, with the next step named rather than taken.
 
+### The causal tree, which works
+
+A fifth estimator, and the first to beat random. It is the one method class the D4 diagnosis
+pointed at: **every split is chosen to maximise the difference in treatment effect between the two
+children**, so it never asks who orders, only where the treatment does something different.
+
+| estimator | Qini on margin | Qini on net |
+|---|---|---|
+| T-learner | −34,852 | −35,217 |
+| X-learner | −25,525 | −97,688 |
+| Two-stage clustering | −66,315 | −185,184 |
+| Transformed outcome | −92,270 | −153,367 |
+| **Causal tree** | **+13,096** | **+12,330** |
+
+Reproducible to four decimals across separate processes. The root split is `promo_share_pre <= 0.08`
+— pre-period promotion usage, which is exactly the behavioural signature that should separate a
+deal-hunter from a premium customer, and it was found without ever being told the segment exists.
+Honest leaf effects run from **+₹114.6 to −₹85.5**, every leaf carrying both arms.
+
+**Honesty is the safeguard, not a detail.** The criterion rewards splits that make effects differ,
+and on noise it will find some; an ordinary tree would then report leaf effects that are artefacts
+of the rows that chose the split. The sample is halved — one half decides structure, the other
+estimates effects — and a test asserts that on pure noise no honest leaf exceeds ±₹10.
+
+And the policy answer the project was built to produce:
+
+> Shown to everybody the rail loses **₹152,901**. Shown to the top 20% by predicted net uplift it
+> gains **₹60,711**.
+
+**Read the coefficient, not the row.** The targeting curve is not monotonic — the 10% and 30% points
+sit either side of zero — because a cut that thin holds only a few hundred control customers. The
+Qini integrates the whole curve and is the stable number; any single fraction on it is one noisy
+estimate.
+
+### A correction to D3, found by rerunning it
+
+The burn-in change forced `retention.py` to bound redemption by the assignment date — during the
+burn-in the rail runs for everyone, so customers later assigned to the holdout had redeemed, which
+had put the control arm's redemption rate above zero and invalidated the compliance figure. Two
+tests caught it.
+
+Rerun on the 225-day build, **D3's headline does not replicate at conventional significance**:
+
+| | 180-day build | 225-day build |
+|---|---|---|
+| Churn ITT | +1.06 pp [+0.38, +1.73] | +0.73 pp [−0.31, +1.78] — **n.s.** |
+| Minimum detectable | 0.96 pp | 1.49 pp |
+| Stockout days | +0.153 [+0.123, +0.182] | +0.210 [+0.177, +0.244] |
+
+The direction is unchanged and the **mechanism replicates strongly** — exposed customers carry
+materially more stockout-affected days on both builds. What does not survive is the claim that the
+churn effect itself is distinguishable from zero. D3 should be read as *the rail costs availability,
+and availability plausibly costs retention*, not as a measured retention effect.
+
 ### One hard dependency
 
 **D1 blocks D4.** Proper uplift needs customer-level random assignment, and the simulator currently

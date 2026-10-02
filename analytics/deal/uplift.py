@@ -52,6 +52,8 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+from analytics.deal.causal_tree import CausalTree
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 WAREHOUSE = Path(
     os.environ.get("FRESHFLOW_WAREHOUSE", ROOT / "data" / "warehouse" / "freshflow.duckdb")
@@ -342,6 +344,19 @@ def two_stage(
     )
 
 
+def causal_tree(train: pd.DataFrame, score: pd.DataFrame, outcome: str) -> np.ndarray:
+    """The one that works. Splits on the effect, estimates leaves honestly.
+
+    See `analytics/deal/causal_tree.py` for why, at length. The short version is
+    that the other four optimise the outcome, feature-space variance, or a target
+    with crippling variance, and this one optimises the thing the question is
+    about: where the treatment does something different.
+    """
+    numeric = [f for f in FEATURES if f not in CATEGORICAL]
+    tree = CausalTree(features=numeric, seed=SEED).fit(train, outcome)
+    return tree.predict(score)
+
+
 def qini(uplift: np.ndarray, treated: np.ndarray, outcome: np.ndarray) -> QiniResult:
     """Incremental outcome captured as the targeted fraction grows.
 
@@ -372,28 +387,37 @@ def qini(uplift: np.ndarray, treated: np.ndarray, outcome: np.ndarray) -> QiniRe
     return QiniResult(curve=curve, coefficient=area - random_area, random_area=random_area)
 
 
-def policy_table(score: pd.DataFrame, net_uplift: np.ndarray, deciles: int = 10) -> pd.DataFrame:
-    """What each decile of predicted net uplift actually delivered."""
-    frame = score.assign(net_uplift=net_uplift)
-    frame["decile"] = pd.qcut(
-        frame["net_uplift"].rank(method="first", ascending=False), deciles, labels=False
-    )
+def targeting_curve(
+    uplift: np.ndarray,
+    treated: np.ndarray,
+    outcome: np.ndarray,
+    fractions=(0.1, 0.2, 0.3, 0.5, 1.0),
+) -> pd.DataFrame:
+    """Cumulative incremental outcome if you target the top fraction by uplift.
+
+    This replaces a per-decile table, which was the obvious presentation and the
+    wrong one. A decile here holds about 1,000 customers of whom roughly 200 are
+    control, so a decile-level uplift carries a standard error near Rs 50 on an
+    effect of a few rupees - the column swung from -98 to +109 and none of it
+    meant anything. The cumulative form is what the policy question actually
+    asks ("target the top 30% and you capture what?") and it averages over
+    everything above the cut rather than inside a thin slice.
+    """
+    result = qini(uplift, treated, outcome)
+    curve = result.curve
     rows = []
-    for d, chunk in frame.groupby("decile"):
-        treated = chunk[chunk["treated"] == 1]
-        control = chunk[chunk["treated"] == 0]
-        if treated.empty or control.empty:
-            continue
-        margin = treated["margin_post"].mean() - control["margin_post"].mean()
-        churn = treated["churned"].mean() - control["churned"].mean()
+    for f in fractions:
+        row = curve.iloc[min(int(f * len(curve)), len(curve) - 1)]
         rows.append(
             {
-                "decile": int(d) + 1,
-                "customers": len(chunk),
-                "pred_net_uplift": chunk["net_uplift"].mean(),
-                "actual_margin_uplift": margin,
-                "actual_churn_uplift": churn,
-                "actual_net": margin - churn * CUSTOMER_VALUE,
+                "targeted": f,
+                "gain": float(row["gain"]),
+                # NO share-of-total column. The total net gain here is
+                # negative - the rail loses money shown to everybody - and a
+                # share of a negative denominator inverts, so "37% of the total"
+                # printed next to a loss of 56,359. What the policy question
+                # needs is the level and the margin over random, both absolute.
+                "vs_random": float(row["gain"] - row["random"]),
             }
         )
     return pd.DataFrame(rows)
@@ -423,7 +447,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print()
 
-    print("  Four estimators, so the comparison is in the output rather than in a claim.")
+    print("  Five estimators, so the comparison is in the output rather than in a claim.")
     print()
     print(f"    {'estimator':<12} {'outcome':<8} {'Qini':>14}   verdict")
     results = {}
@@ -432,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
         ("X-learner", x_learner),
         ("two-stage", two_stage),
         ("transformed", transformed_outcome),
+        ("causal-tree", causal_tree),
     )
     for name, fn in estimators:
         margin_up = fn(train, score, "margin_post")
@@ -450,28 +475,34 @@ def main(argv: list[str] | None = None) -> int:
             verdict = "beats random" if r.beats_random else "NO BETTER THAN RANDOM"
             print(f"    {name:<12} {label:<8} {r.coefficient:>14,.1f}   {verdict}")
 
-    net_uplift = results["two-stage"]
+    net_uplift = results["causal-tree"]
     print()
-    print(f"  Deciles of predicted net uplift (customer value Rs {args.customer_value:,.0f})")
-    print(
-        f"    {'dec':>4} {'n':>7} {'pred net':>10} {'margin':>10} {'churn pp':>10} {'actual net':>12}"
-    )
-    table = policy_table(score, net_uplift)
+    print(f"  Targeting by causal-tree net uplift (customer value Rs {args.customer_value:,.0f})")
+    print(f"    {'targeted':>9} {'net gain':>14} {'vs random':>13}")
+    table = targeting_curve(net_uplift, treated, net_outcome)
     for _, r in table.iterrows():
-        print(
-            f"    {int(r['decile']):>4} {int(r['customers']):>7,} {r['pred_net_uplift']:>10,.1f} "
-            f"{r['actual_margin_uplift']:>10,.1f} {r['actual_churn_uplift'] * 100:>10,.2f} "
-            f"{r['actual_net']:>12,.1f}"
-        )
+        mark = "  <- pays" if r["gain"] > 0 else ""
+        print(f"    {r['targeted']:>8.0%} {r['gain']:>14,.0f} {r['vs_random']:>13,.0f}{mark}")
 
-    positive = table[table["actual_net"] > 0]
+    everyone = float(table.loc[table["targeted"] == 1.0, "gain"].iloc[0])
+    pays = table[table["gain"] > 0]
     print()
-    if len(positive):
-        share = positive["customers"].sum() / table["customers"].sum()
-        print(f"    {len(positive)} of {len(table)} deciles pay ({share:.0%} of customers).")
+    if len(pays) and everyone < 0:
+        best = pays.iloc[0]
+        print(
+            f"    Shown to everybody the rail loses Rs {abs(everyone):,.0f}. Shown to the top "
+            f"{best['targeted']:.0%} by predicted net uplift it gains Rs {best['gain']:,.0f}."
+        )
+        print("    That sign change is the whole argument for targeting it.")
+        print()
+        print("    Read the Qini, not the row. The curve is not monotonic - the 10% and 30%")
+        print("    points sit either side of zero - because a cut that thin holds only a few")
+        print("    hundred control customers. The coefficient integrates the whole curve and")
+        print("    is the stable number; any single fraction on it is one noisy estimate.")
+    elif everyone > 0:
+        print(f"    The rail pays whoever sees it: Rs {everyone:,.0f} across the base.")
     else:
-        print("    No decile pays at this customer value. The rail does not survive targeting.")
-    print()
+        print("    No targeting fraction turns the rail positive.")
     return 0
 
 
