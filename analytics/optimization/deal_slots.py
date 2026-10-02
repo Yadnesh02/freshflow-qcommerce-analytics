@@ -15,9 +15,20 @@ the whole spend is subsidy. Ten Fruits & Vegetables SKUs at 4.7 days and six
 Dairy at 6.2 are the only ones where the deal could have cleared anything.
 
 **What the deal costs, measured rather than assumed.** On its own line the deal
-runs at minus Rs 426,683 a year: 12,153 units, Rs 162,532 of revenue against
-Rs 589,214 of COGS. Anything that justifies it has to come from the basket
+runs at minus Rs 436,771 a year: 11,620 net units, Rs 127,820 of revenue against
+Rs 564,591 of COGS. Anything that justifies it has to come from the basket
 around it or from the customers it brings back.
+
+    CORRECTED IN D2. This paragraph previously read minus Rs 426,683 on 12,153
+    units and Rs 162,532 of revenue - which is Rs 13.37 a unit on an Rs 11 deal,
+    and therefore impossible for deal-priced lines. No definition of revenue on
+    the warehouse reproduced it. The figure was prose with no query behind it,
+    so nothing caught it for a sprint and a half.
+
+    The numbers above now come from `analytics/deal/pnl.py`, which asserts that
+    revenue over net units equals the deal price before it returns anything. One
+    assertion is the whole difference between a number that can rot and one that
+    cannot.
 
 **The elasticity from S4.1 cannot be used here, and that is not a shortcut.**
 That estimate deliberately excludes price ratios below 0.15, because the Rs 11
