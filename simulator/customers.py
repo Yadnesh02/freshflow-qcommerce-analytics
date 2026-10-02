@@ -101,6 +101,11 @@ class CustomerBase:
         # between arms carries last month's exposure into this month's
         # counterfactual.
         self._holdout_share = self.cfg.deal_holdout_share
+        # The rail runs for everybody until this date; the holdout starts on it.
+        # Everything before it is the pre-treatment window D4 builds features
+        # from, and nothing before it is treated differently by arm.
+        start, _ = self.cfg.window
+        self._assignment_date = start + dt.timedelta(days=self.cfg.deal_burn_in_days)
         self._deal_response = np.array(
             [self.cfg.raw["segments"]["deal_holdout"]["response"][n] for n in self.segment_names]
         )
@@ -188,6 +193,22 @@ class CustomerBase:
         active = np.flatnonzero(self.active_mask(date))
         return {si: active[self._store_idx[active] == si] for si in range(len(self.store_ids))}
 
+    @property
+    def assignment_date(self) -> dt.date:
+        """The day the holdout starts. Before it the rail is on for everyone."""
+        return self._assignment_date
+
+    def exposed_mask(self, date: dt.date) -> np.ndarray:
+        """Who can see the rail on this date.
+
+        During the burn-in that is everyone, which is the point: the pre-period
+        has to be free of any arm difference, or the features built from it
+        carry the treatment they are supposed to predict.
+        """
+        if date < self._assignment_date:
+            return np.ones(len(self.df), dtype=bool)
+        return self._deal_exposed
+
     def exposed_by_store(self, date: dt.date) -> dict[int, tuple[np.ndarray, np.ndarray]]:
         """Each store's live customers, split into deal-exposed and held out.
 
@@ -197,15 +218,16 @@ class CustomerBase:
         someone who was not.
         """
         active = self.active_mask(date)
+        exposed = self.exposed_mask(date)
         return {
             si: (
-                np.flatnonzero(active & (self._store_idx == si) & self._deal_exposed),
-                np.flatnonzero(active & (self._store_idx == si) & ~self._deal_exposed),
+                np.flatnonzero(active & (self._store_idx == si) & exposed),
+                np.flatnonzero(active & (self._store_idx == si) & ~exposed),
             )
             for si in range(len(self.store_ids))
         }
 
-    def deal_response_by_store(self, date: dt.date) -> np.ndarray:
+    def deal_response_by_store(self, date: dt.date) -> np.ndarray:  # noqa: D401
         """Per store, the exposed arm's mean response to a live slot.
 
         A store whose live customers are mostly `convenience` barely moves when
@@ -215,7 +237,7 @@ class CustomerBase:
         itself is preserved downstream, where the assembler decides which of
         those customers the extra baskets actually land on.
         """
-        active = self.active_mask(date) & self._deal_exposed
+        active = self.active_mask(date) & self.exposed_mask(date)
         out = np.ones(len(self.store_ids))
         for si in range(len(self.store_ids)):
             here = active & (self._store_idx == si)
@@ -227,8 +249,10 @@ class CustomerBase:
         """Per-segment response, for weighting which customers get the extra baskets."""
         return self._deal_response
 
-    def exposed_share(self) -> float:
-        """The realised treated fraction, which is not exactly 1 - share."""
+    def exposed_share(self, date: dt.date | None = None) -> float:
+        """The realised treated fraction on a date. One during the burn-in."""
+        if date is not None and date < self._assignment_date:
+            return 1.0
         return float(self._deal_exposed.mean())
 
     # ------------------------------------------------------------------ events
@@ -304,12 +328,11 @@ class CustomerBase:
         without the join silently picking up a customer's attributes as of the
         wrong month.
         """
-        start, _ = self.cfg.window
         return pd.DataFrame(
             {
                 "customer_id": self.df["customer_id"].to_numpy(),
                 "deal_arm": np.where(self._deal_exposed, "exposed", "holdout"),
-                "assigned_date": start,
+                "assigned_date": self._assignment_date,
                 "holdout_share": self._holdout_share,
             }
         )

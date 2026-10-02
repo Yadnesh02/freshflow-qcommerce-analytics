@@ -84,6 +84,11 @@ class SimConfig:
         raise KeyError(f"unknown category '{l1}'")
 
     @property
+    def deal_burn_in_days(self) -> int:
+        """Days the rail runs for everyone before the holdout starts (D1/D4)."""
+        return int(self.raw["segments"]["deal_holdout"]["burn_in_days"])
+
+    @property
     def deal_holdout_share(self) -> float:
         """Fraction of customers permanently excluded from the deal rail (D1)."""
         return float(self.raw["segments"]["deal_holdout"]["share"])
@@ -343,6 +348,14 @@ def _validate_segments(seg_doc: dict[str, Any], category_names: set[str]) -> Non
     for name, r in response.items():
         if not 0 < r < 3:
             raise ConfigError(f"deal response for '{name}' is {r}, expected between 0 and 3")
+
+    burn_in = seg_doc["deal_holdout"]["burn_in_days"]
+    if burn_in < 1:
+        raise ConfigError(
+            f"deal_holdout.burn_in_days is {burn_in}. Without a burn-in there is no "
+            f"pre-treatment behaviour to build uplift features from, and every feature "
+            f"in the warehouse is an outcome of the treatment."
+        )
 
     share = seg_doc["deal_holdout"]["share"]
     if not 0 < share <= 0.5:

@@ -462,7 +462,7 @@ class SimulationRun:
         # else sees the deal. On a SKU with no slot today the two surfaces are
         # identical, so the arms sum to exactly the demand this drew before the
         # split existed - the holdout costs nothing where the rail is not running.
-        exposed_share = self.customers.exposed_share()
+        exposed_share = self.customers.exposed_share(day)
 
         # A slot does not only move the dealt SKU. It is a reason to open the
         # app, and the basket that follows is mostly the customer's usual one -

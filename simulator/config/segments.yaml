@@ -161,6 +161,24 @@ acquisition:
 deal_holdout:
   share: 0.20
 
+  # Days the rail runs for everyone before the holdout is carved out (D1,
+  # amended in D4). Not a detail - it is what makes an uplift model possible.
+  #
+  # With assignment on day one there is no pre-treatment behaviour anywhere in
+  # the warehouse: 25 of mart_customer_360's 31 columns are computed over the
+  # treated window, so training on RFM or discount dependency would be fitting
+  # on outcomes of the treatment. The model would score beautifully and predict
+  # nothing, because it would be reading off who responded rather than who will.
+  #
+  # So the rail runs for the whole base first and the holdout starts on a date,
+  # which is also how a growth team actually introduces one - the deal already
+  # exists, and you stop showing it to a slice. Features come from the burn-in,
+  # outcomes from after it, and the two never overlap.
+  #
+  # 45 days matches the pre-period the store-level holdout already uses, for the
+  # same reason: a handful of days lets any two groups look alike by accident.
+  burn_in_days: 45
+
   # How much more likely an exposed customer is to order at all on a day their
   # store runs a slot. THIS IS THE GROUND TRUTH D4 HAS TO RECOVER WITHOUT BEING
   # TOLD, which is why it lives here and why `_segment_idx` is stripped before

@@ -58,7 +58,7 @@ date, the set of dealt SKUs and the set of SKUs at risk of expiring had an **emp
 |---|---|---|
 | ~~**G1**~~ | ~~The attach number is not causal~~ | **Closed in D2.** [`analytics/deal/attach.py`](analytics/deal/attach.py) estimates it intent-to-treat against D1's randomised holdout, customers who never ordered included as zeros. Full-year figures await a post-D1 warehouse rebuild. |
 | ~~**G2**~~ | ~~Retention value is set to zero~~ | **Closed in D3** — and the answer is negative. Exposed customers churn **+1.06pp** more [+0.38, +1.73], because the rail concentrates demand onto SKUs that then run dry: stockout-affected days rise 16%. `reactivation_value` must not be set positive on this evidence. (`retention_90d` in `mart_experiment_readout` belongs to the *store-level* Policy A/B experiment and stays open.) |
-| **G3** | Nobody is targeted | Slots are allocated store × SKU × day. There is no *who*. Every feature needed is already in `mart_customer_360` — RFM, cohort, discount-dependency index, 90-day contribution — and no model uses them. |
+| ~~**G3**~~ | ~~Nobody is targeted~~ | **Closed in D4, with a negative answer.** T-learner, X-learner and behavioural clustering all lose to random targeting. The heterogeneity is real — a ₹144 spread across latent segments, correctly ordered — but per-customer signal-to-noise is 0.0052 and no feature in the warehouse identifies the segment well enough. |
 
 Closing those three is the work. **[The plan is here](docs/DEAL_PLAN.md)**: four analytical chapters,
 seven sprints, each with a gate that can fail.
@@ -80,7 +80,7 @@ unanswered question in it turned out to be.
 | **D1** | Customer-level randomised deal exposure in the simulator | ✅ done — max SMD 0.028, no deal line reaches the holdout |
 | **D2** | Causal attach estimate + cannibalisation event study | ✅ done — 4.66× return [0.30×, 9.02×]; P&L corrected to −₹436,771 |
 | **D3** | Retention readout against D1's holdout | ✅ done — the rail **costs** retention: +1.06pp churn [+0.38, +1.73], via stockouts |
-| **D4** | Uplift model, Qini curve, targeting policy | ⬜ not started |
+| **D4** | Uplift model, Qini curve, targeting policy | ✅ done — **no estimator beats random**; an oracle on the latent segment reaches Qini +149k, so the effect is there and the features cannot reach it |
 | **D5** | Deal-slot allocator re-pointed at measured coefficients | ⬜ not started |
 | **D6** | Three-page dashboard, rewritten story | ⬜ not started |
 

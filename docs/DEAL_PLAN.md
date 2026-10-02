@@ -156,7 +156,7 @@ did not.
 | **D1** | Customer-level randomised deal exposure in the simulator | Covariate balance holds — standardised mean difference < 0.10 across **pre-treatment** attributes between exposed and control, and no deal-priced line ever reaches a held-out customer | 1d |
 | **D2** | Causal attach + cannibalisation event study | ✅ Attach reported with a CI against the naive figure; P&L reconciliation resolved. **Full-year numbers need a post-D1 warehouse rebuild** | 1.5d |
 | **D3** | Retention readout against D1's holdout | ✅ Retention measured with a CI and an MDE beside it; the mechanism behind the sign is identified rather than asserted | 1d |
-| **D4** | Uplift model, Qini, targeting policy | Beats random targeting on Qini on a held-out set. If it does not, that is the finding and it is reported | 2d |
+| **D4** | Uplift model, Qini, targeting policy | ✅ Reported: **no estimator beats random**, with an oracle ceiling proving the effect is there to find | 2d |
 | **D5** | Allocator re-pointed at measured coefficients | The deal P&L reconciles end to end: subsidy + cannibalisation against attach + retention, with no unexplained residual | 0.5d |
 | **D6** | Three-page dashboard, README, the 60-second story | Each page answers its question above the fold | 1.5d |
 
@@ -245,6 +245,50 @@ for this chapter.
 window; D3 says it costs retention beyond it. Targeting is now the question of *which customers the
 margin gain outruns the churn cost for* — which is a far better brief for an uplift model than
 "find the responders".
+
+### What D4 found: the null, and why it is informative
+
+Three estimators on a held-out 30% of customers, all reproducible:
+
+| estimator | Qini on margin | verdict |
+|---|---|---|
+| T-learner | −77,244 | worse than random |
+| X-learner | −60,998 | worse than random |
+| Two-stage (behavioural clusters) | −41,051 | worse than random |
+| *Oracle — true latent segment* | *+149,419* | *beats random* |
+
+**A null is only informative next to a ceiling.** Without the oracle, "no model worked" and "there
+was nothing to find" are indistinguishable and imply opposite next steps. The oracle settles it: the
+heterogeneity is real, large and correctly ordered against the configured response —
+
+| segment | configured | actual margin uplift |
+|---|---|---|
+| deal_hunter | 1.120 | +₹76.6 ± 47 |
+| price_sensitive | 1.055 | +₹24.5 ± 28 |
+| bulk_planner | 1.015 | −₹3.9 ± 32 |
+| convenience | 1.000 | −₹47.7 ± 40 |
+| premium | 0.955 | −₹67.7 ± 39 |
+
+— a ₹144 spread. What is missing is the ability to tell *who is who* from behaviour alone.
+A supervised classifier recovers the latent segment at 77.4% accuracy against a 29.9% baseline, and
+ranking on its predictions reaches a Qini of **+32,933**. Unsupervised clustering on the same
+features reaches only −41,051. **The signal is in the data; it is not reachable without a label
+nothing in the warehouse carries.** That is the finding, and it names its own next step: find a
+behavioural proxy for the segment, or lengthen the burn-in until clustering separates them.
+
+The root cause is signal-to-noise. The per-customer margin effect is **+₹3.69** against an outcome
+standard deviation of **₹706** — 0.5% of one SD. A T-learner differences two models fitted on that;
+the difference is mostly the difference of their errors.
+
+> **Three reproducibility bugs, found because the numbers moved.** The first run reported the
+> T-learner's margin Qini at 8,645; a rerun on identical data said 39,872, then 80,445. All three
+> "beats random" verdicts in that run were noise. The causes, in the order they were found: the
+> panel query had **no `ORDER BY`**, so DuckDB returned rows in a different order each process and
+> the train/test split landed on different customers; LightGBM's **thread count** was unpinned
+> (`n_jobs`, not `num_threads`, is the sklearn wrapper's name for it); and DuckDB **sums floats in
+> parallel**, so `sum(gross_margin)` differed in its last bits between runs — enough, on a signal
+> this small, to move every split point. Monetary sums are now rounded to the paisa, which they
+> should have been anyway. Three processes now agree to the decimal.
 
 ### One hard dependency
 
