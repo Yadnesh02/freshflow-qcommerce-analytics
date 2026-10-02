@@ -219,7 +219,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{e.diff:>10,.2f} {ci:>22}{star}"
         )
     print(f"\n    n = {effects[0].n_exposed:,} exposed, {effects[0].n_holdout:,} held out.")
-    print("    Intent to treat: customers who never ordered are in, as zeros.\n")
+    print("    Intent to treat: customers who never ordered are in, as zeros.")
+    print("    Per ASSIGNED CUSTOMER - incidence plus attach. Not comparable to the")
+    print("    naive figure above, which is per order and attach only.\n")
     return 0
 
 

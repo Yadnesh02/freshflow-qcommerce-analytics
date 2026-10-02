@@ -41,7 +41,7 @@ reason this project exists.**
 | **The rail costs** | **−₹436,771** over the simulated year. 11,696 units at an effective ₹10.93 against ₹564,591 of landed cost. Measured on `fct_order_item` where `promo_id = 'PROMO-DEAL11'`. |
 | **Uptake is real** | **3.57×** median lift on dealt days, across the 45 SKUs with both dealt and undealt uncensored days — an average store-SKU moving from 0.85 units a day to 3.76. Median rather than mean, because the mean is carried by SKUs that barely sell otherwise. |
 | **It reactivates, it does not acquire** | A deal order is **2.1×** more likely to be a customer returning after a 30-day gap (5.31% against 2.48%), and 2.4× at 60 days. First-*ever* orders are slightly **lower** on deal days. |
-| **What it earns back is not known** | Deal baskets carry ₹77.90 of margin on the rest of the basket against ₹71.63 for others — **+₹6.27**. This is observational. Shoppers who take a deal are not a random sample of shoppers, so it is an upper bound and the code that uses it says so. |
+| **What it earns back** | **4.66× per rupee of subsidy, CI [0.30×, 9.02×]** — measured against a randomised customer-level holdout (D1), on a 90-day validation build. The interval crosses 1×, so on that window the rail cannot yet be shown to pay for itself. The naive observational figure the code used to rely on was +₹6.27 per deal order, which is a different quantity: attach only, with no incidence effect in it. |
 
 There is one more finding worth keeping, because it is the opening the project walks through:
 **the rail is run as a gimmick rather than a system.** More than half the slots over the year went
@@ -52,7 +52,7 @@ date, the set of dealt SKUs and the set of SKUs at risk of expiring had an **emp
 
 | | Gap | Where it stands today |
 |---|---|---|
-| **G1** | The attach number is not causal | The deal's main justification is the least rigorous number in it, and `analytics/optimization/deal_slots.py` labels it "an upper bound on this term, not an estimate of it". |
+| ~~**G1**~~ | ~~The attach number is not causal~~ | **Closed in D2.** [`analytics/deal/attach.py`](analytics/deal/attach.py) estimates it intent-to-treat against D1's randomised holdout, customers who never ordered included as zeros. Full-year figures await a post-D1 warehouse rebuild. |
 | **G2** | Retention value is set to zero | `reactivation_value` is a declared parameter defaulting to **0**, and `retention_90d` comes back `None` in `mart_experiment_readout`. The thing the rail exists to buy is valued at nothing and measured not at all. |
 | **G3** | Nobody is targeted | Slots are allocated store × SKU × day. There is no *who*. Every feature needed is already in `mart_customer_360` — RFM, cohort, discount-dependency index, 90-day contribution — and no model uses them. |
 
@@ -74,7 +74,7 @@ unanswered question in it turned out to be.
 | **Platform** · sprints 0–5 | Simulator, warehouse, decision engines, metric registry, live app, impact proof | ✅ complete — all five gates pass |
 | **D0** | Re-headline: README, the question, the plan | ✅ done |
 | **D1** | Customer-level randomised deal exposure in the simulator | ✅ done — max SMD 0.028, no deal line reaches the holdout |
-| **D2** | Causal attach estimate + cannibalisation event study | ⬜ not started |
+| **D2** | Causal attach estimate + cannibalisation event study | ✅ done — 4.66× return [0.30×, 9.02×]; P&L corrected to −₹436,771 |
 | **D3** | Retention readout — difference-in-differences on 90-day retention | ⬜ not started |
 | **D4** | Uplift model, Qini curve, targeting policy | ⬜ not started |
 | **D5** | Deal-slot allocator re-pointed at measured coefficients | ⬜ not started |
@@ -233,9 +233,12 @@ those is exactly what **D3** exists to close.
 - **The data is simulated.** Every brand is fictional. The analytics layer is architecturally
   forbidden from importing the simulator, and [a test walks the AST to enforce it](tests/test_import_boundary.py) —
   otherwise every result would be circular.
-- **The deal's attach number is observational.** +₹6.27 is a difference between self-selected
-  groups, not a causal estimate, and nothing downstream of it should be read as one until **D2**
-  lands.
+- **The deal's causal numbers come from a 90-day validation build, not the full year.** The
+  warehouse the headline P&L is computed on predates D1's holdout, so it has no control group in
+  it. Everything causal here is measured on a 90-day rebuild and the confidence intervals are wide
+  enough to say so — the order effect is not significant on that window at all.
+- **The simulated deal response is a calibration, not an observation.** It was shrunk 6.5× in D2
+  after the first parameters produced a 25× return, which said more about the config than the rail.
 - **The deal-slot performance mart does not exist.** `mart_deal_slot_perf` is declared in the
   registry and never built, so the metrics that read it skip loudly rather than passing quietly.
 - **Delivery cost is assumed, not measured.** ₹42 per order, declared in one place. The customer

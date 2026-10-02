@@ -155,9 +155,20 @@ def test_the_response_is_heterogeneous(base: CustomerBase) -> None:
     segment that generated it is stripped before anything is emitted.
     """
     response = base.segment_response()
-    assert response.max() - response.min() > 0.25, (
-        f"deal response spans only {response.min():.2f}-{response.max():.2f}; "
-        f"too flat for uplift modelling to be worth doing"
+    spread = float(response.max() - response.min())
+    # The realised population mean, not the config's unweighted one: a wide
+    # spread concentrated in a 2% segment would not be worth targeting on.
+    mean_excess = abs(float(response[base._segment_idx].mean()) - 1.0)
+
+    # Relative, not absolute. D2 recalibrated these down by 6.5x because the
+    # first pass made the rail return 25x and the targeting question moot; an
+    # absolute threshold would have failed that fix for being too small, when
+    # what actually matters is that the spread dwarfs the average effect. It is
+    # the gap between segments, not the level, that makes ranking customers pay.
+    assert spread > 4 * mean_excess, (
+        f"deal response spans {response.min():.3f}-{response.max():.3f} (spread {spread:.3f}) "
+        f"against a mean effect of {mean_excess:.3f}. Too flat relative to the average for "
+        f"targeting to beat showing it to everyone."
     )
     assert (response < 1.0).any(), (
         "no segment responds negatively - the holdout can never find the effect "

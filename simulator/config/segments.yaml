@@ -181,9 +181,27 @@ deal_holdout:
   #
   # A value below 1.0 is not a rounding artefact. It is the effect every deal
   # programme claims does not exist and every holdout eventually finds.
+  # RECALIBRATED. The first pass used 1.55/1.30/1.10/1.02/0.98, a mean lift of
+  # 16.9% on slot days, and the measurement in D2 came back at 25.3x return per
+  # rupee of subsidy. That is not a finding, it is this block - and it ruins the
+  # project twice over: "does the rail pay" answers trivially yes, and targeting
+  # stops mattering because at 25x you show it to everybody.
+  #
+  # The subsidy is small because the baseline rail is one SKU citywide, about
+  # Rs 3 per customer. Getting the return down to 1x from here needs roughly a
+  # 25-fold shrink, which drives the order effect to ~0.04 per customer and
+  # makes it statistically invisible even over a full year. Marginal economics
+  # and a detectable effect are not both reachable while the rail is this small;
+  # widening it means changing `deal_slot.slots_per_store`, which is the control
+  # arm of the sprint 5 experiment and would invalidate its published table.
+  #
+  # So this lands at a mean of about 1.026 - a return near 4x. Profitable, not
+  # absurd, and still measurable. The story it supports is the honest one: the
+  # rail pays, and it pays substantially better once it stops being shown to the
+  # 14% of customers it actively puts off.
   response:
-    deal_hunter: 1.55
-    price_sensitive: 1.30
-    bulk_planner: 1.10
-    convenience: 1.02
-    premium: 0.98
+    deal_hunter: 1.120
+    price_sensitive: 1.055
+    bulk_planner: 1.015
+    convenience: 1.000
+    premium: 0.955

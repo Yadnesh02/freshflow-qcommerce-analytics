@@ -41,11 +41,12 @@ And the finding that opens the story: **the rail is run as a gimmick rather than
 than half the slots over the year went to goods with ~800 days of shelf life, where clearance value
 is exactly zero. On the as-of date, dealt SKUs ∩ at-risk SKUs was **empty**.
 
-> **A reconciliation note.** The P&L above is recomputed from the warehouse, and it does not match
-> the figures in the `deal_slots.py` docstring (12,153 units / ₹162,532 / ₹589,214 / −₹426,683).
-> That docstring implies ₹13.37 per unit on an ₹11 deal, which cannot be right for deal-priced
-> lines; the warehouse's ₹10.93 is internally consistent. **D2 resolves which is correct and
-> corrects the loser.** Until then this plan quotes the warehouse.
+> **RESOLVED IN D2.** The `deal_slots.py` docstring claimed 12,153 units / ₹162,532 / ₹589,214 /
+> −₹426,683 — ₹13.37 per unit on an ₹11 deal, which no definition of revenue on the warehouse
+> reproduces. The correct figure is **−₹436,771 on 11,620 net units at exactly ₹11.00**, and it now
+> comes from [`analytics/deal/pnl.py`](../analytics/deal/pnl.py), which asserts that revenue over
+> net units equals the deal price before returning anything. The docstring is corrected and carries
+> a note saying what it used to say.
 
 ## 3. The three gaps
 
@@ -153,7 +154,7 @@ did not.
 |---|---|---|---|
 | **D0** | Re-headline: README, the question, this plan | A reader lands on the repo and can state the question in one sentence | 0.5d |
 | **D1** | Customer-level randomised deal exposure in the simulator | Covariate balance holds — standardised mean difference < 0.10 across **pre-treatment** attributes between exposed and control, and no deal-priced line ever reaches a held-out customer | 1d |
-| **D2** | Causal attach + cannibalisation event study | Attach is reported with a confidence interval and stated against the naive +₹6.27, whether it moves or not. The P&L reconciliation of §2 is resolved | 1.5d |
+| **D2** | Causal attach + cannibalisation event study | ✅ Attach reported with a CI against the naive figure; P&L reconciliation resolved. **Full-year numbers need a post-D1 warehouse rebuild** | 1.5d |
 | **D3** | Retention readout — DiD on 90-day retention | `retention_90d` stops returning null, and parallel trends is checked on the 45-day pre-period rather than asserted | 1d |
 | **D4** | Uplift model, Qini, targeting policy | Beats random targeting on Qini on a held-out set. If it does not, that is the finding and it is reported | 2d |
 | **D5** | Allocator re-pointed at measured coefficients | The deal P&L reconciles end to end: subsidy + cannibalisation against attach + retention, with no unexplained residual | 0.5d |
@@ -164,6 +165,43 @@ did not.
 > them to balance *after* exposure would be requiring the treatment not to work. Balance belongs on
 > attributes fixed before assignment — segment, home store, signup date, membership. The realised
 > figures are max SMD **0.0283** across those four, on a 39,074 / 9,696 split.
+
+### What D2 found, on a 90-day validation build
+
+The estimand changed when D1 landed. The plan wrote this chapter as propensity weighting because
+the only comparison available was deal-takers against non-takers; with a randomised holdout the
+causal estimate is a difference between arms, and propensity weighting is kept only as the naive
+contrast.
+
+| | per assigned customer, 90 days | 95% CI |
+|---|---|---|
+| Orders | +0.10 | [−0.13, +0.32] — **not significant** |
+| Revenue | +₹71.14 | [+18.17, +124.11] |
+| Non-deal margin | +₹15.79 | [+3.61, +27.97] |
+| Deal margin (the subsidy) | −₹2.79 | [−2.91, −2.67] |
+| **Return per rupee of subsidy** | **4.66×** | **[0.30×, 9.02×]** |
+
+Two things to carry forward rather than gloss. The **order count is not significant** at 90 days —
+expected arithmetic after the recalibration below, not a broken estimator, and the full year has
+roughly four times the data. And the **return's interval crosses 1×**: on this window the rail
+cannot be shown to pay for itself at all. That is the honest headline until a full-year build
+exists, and it is a better one than a confident number would have been.
+
+The naive and causal figures are **not the same quantity**. +₹8.44 is per deal-taking *order*
+(attach only, self-selected); +₹15.79 is per assigned *customer* (incidence plus attach). The
+second contains the first. What the comparison shows is how much of the rail's value a per-order
+view cannot see.
+
+Cannibalisation, measured on the full warehouse: **2.9% of a block's lift** is paid for out of the
+surrounding fortnight, and the days after a block are flat — which argues against pull-forward.
+
+> **A calibration correction, recorded because it changed the answer.** D1's first response
+> parameters produced a 25.3× return, which is not a finding — it is the config. They were shrunk
+> 6.5× (share-weighted mean 1.169 → 1.026) so the rail is profitable but not absurd, and the spread
+> between segments was widened relative to the mean so targeting still has something to find. A
+> truly marginal rail is not reachable while `slots_per_store` is 1: the subsidy is ~₹3 a customer,
+> so getting to 1× needs a 25-fold shrink that makes the effect statistically invisible. Widening
+> the rail means changing the sprint 5 control arm, which would invalidate its published table.
 
 ### One hard dependency
 
