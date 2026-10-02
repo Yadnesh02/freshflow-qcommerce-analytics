@@ -177,7 +177,7 @@ deal_holdout:
   #
   # 45 days matches the pre-period the store-level holdout already uses, for the
   # same reason: a handful of days lets any two groups look alike by accident.
-  burn_in_days: 45
+  burn_in_days: 90
 
   # How much more likely an exposed customer is to order at all on a day their
   # store runs a slot. THIS IS THE GROUND TRUTH D4 HAS TO RECOVER WITHOUT BEING

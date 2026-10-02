@@ -290,6 +290,37 @@ the difference is mostly the difference of their errors.
 > this small, to move every split point. Monetary sums are now rounded to the paisa, which they
 > should have been anyway. Three processes now agree to the decimal.
 
+### The longer burn-in, and a fourth estimator
+
+Both were tried after D4's null. The burn-in was doubled to 90 days and the simulation extended to
+225 so the post-period stayed pinned at 135 — otherwise the comparison would have traded outcome
+window for feature window and said nothing. A fourth estimator was added on a different principle:
+the Horvitz-Thompson transform, `Y* = Y(T−p)/p(1−p)`, whose conditional mean **is** the uplift, so
+its splits chase effect heterogeneity rather than outcome level.
+
+| | 45-day burn-in | 90-day burn-in |
+|---|---|---|
+| Segment recovery (supervised, from features) | 77.4% | **84.1%** |
+| Oracle Qini (true segment) | +149,419 | **+96,764** |
+| T-learner | −77,244 | −34,852 |
+| X-learner | −60,998 | −25,525 |
+| Two-stage clustering | −41,051 | −66,315 |
+| Transformed outcome | — | −92,270 |
+
+**The burn-in works for what it was supposed to do and does not fix the problem.** Identification
+improved by nearly seven points; the T- and X-learners roughly halved their deficit; and still
+nothing beats random. The transformed outcome, despite being the only estimator whose target is the
+effect itself, came last — its variance at p=0.80 costs more than its objective buys.
+
+So the gap is now precisely located. It is **not** the features (84% of customers are identifiable),
+**not** the burn-in, and **not** the absence of signal (the oracle clears +96,764, and segment-level
+uplift still runs from +₹58.5 for deal_hunter to −₹97.1 for premium). It is the step between: no
+estimator tried converts feature-level identification into effect-level ranking. The one method
+class that attacks exactly that — a causal tree, splitting on treatment-effect heterogeneity rather
+than on outcome variance or feature-space variance — has not been tried.
+
+That is where this chapter stops, with the next step named rather than taken.
+
 ### One hard dependency
 
 **D1 blocks D4.** Proper uplift needs customer-level random assignment, and the simulator currently

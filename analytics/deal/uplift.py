@@ -14,12 +14,15 @@ trained on RFM or discount dependency would be fitting on outcomes of the
 treatment. It would score beautifully on a holdout and predict nothing, because
 it would be reading off who responded rather than who will.
 
-**A T-learner rather than a single model with treatment as a feature.** With one
-model the treatment coefficient has to compete with every other split for the
-tree's attention, and on an effect this small it loses - the model spends its
-capacity predicting who orders, which is not the question. Two models, one per
-arm, differenced at prediction time, keep the effect in the output rather than
-buried in a coefficient.
+**Four estimators, reported side by side, because three of them fail.** The
+T-learner is the obvious choice and the wrong one: it differences two models
+fitted on an outcome with a Rs 700 standard deviation, and what survives is
+mostly the difference of their errors. The X-learner is the textbook answer for
+80/20 arms and does better without being enough. Clustering at least estimates
+the effect where it is well estimated - over thousands of customers at a time -
+but K-means optimises feature-space variance, which is not where the treatment
+differs. The transformed outcome is the only one of the four whose target IS the
+uplift, so it is the only one whose splits chase the right thing.
 
 **Qini rather than AUC.** AUC asks whether the model ranks responders. Qini asks
 whether it ranks people by how much the treatment *moved* them, which is the only
@@ -263,6 +266,37 @@ def x_learner(train: pd.DataFrame, score: pd.DataFrame, outcome: str) -> np.ndar
     return p * tau0.predict(score[FEATURES]) + (1.0 - p) * tau1.predict(score[FEATURES])
 
 
+def transformed_outcome(train: pd.DataFrame, score: pd.DataFrame, outcome: str) -> np.ndarray:
+    """One model, fitted on a target whose conditional mean IS the uplift.
+
+    The other three estimators all optimise the wrong thing. T- and X-learners
+    model the OUTCOME and subtract; the clustering models feature-space
+    variance. None of them splits on what the question is about, which is where
+    the treatment effect differs.
+
+    The Horvitz-Thompson transform fixes that without any new machinery:
+
+        Y* = Y * (T - p) / (p * (1 - p))        so  E[Y* | X] = tau(X)
+
+    A regressor fitted on Y* therefore chases effect heterogeneity directly -
+    every split it makes is a split that explains where the treatment did
+    something different, because that is what its target encodes.
+
+    The price is variance. With p = 0.80 a control customer's target is -5Y,
+    which is why this is worth trying on 31k customers and would not be on 300.
+    """
+    p_treat = float(train["treated"].mean())
+    if not 0.0 < p_treat < 1.0:
+        raise ValueError("one arm is empty - the transform divides by zero")
+
+    def star(frame: pd.DataFrame) -> np.ndarray:
+        t = frame["treated"].to_numpy()
+        return frame[outcome].to_numpy() * (t - p_treat) / (p_treat * (1.0 - p_treat))
+
+    model = _fit(train.assign(_star=star(train)), "_star", classifier=False)
+    return model.predict(score[FEATURES])
+
+
 def two_stage(
     train: pd.DataFrame, score: pd.DataFrame, outcome: str, clusters: int = 6
 ) -> np.ndarray:
@@ -389,11 +423,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     print()
 
-    print("  Both estimators, so the comparison is in the output rather than in a claim.")
+    print("  Four estimators, so the comparison is in the output rather than in a claim.")
     print()
     print(f"    {'estimator':<12} {'outcome':<8} {'Qini':>14}   verdict")
     results = {}
-    for name, fn in (("T-learner", t_learner), ("X-learner", x_learner), ("two-stage", two_stage)):
+    estimators = (
+        ("T-learner", t_learner),
+        ("X-learner", x_learner),
+        ("two-stage", two_stage),
+        ("transformed", transformed_outcome),
+    )
+    for name, fn in estimators:
         margin_up = fn(train, score, "margin_post")
         churn_up = fn(train, score, "churned")
         net_up = margin_up - churn_up * args.customer_value
