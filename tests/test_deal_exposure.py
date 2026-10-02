@@ -198,20 +198,47 @@ def test_no_deal_line_ever_reaches_a_held_out_customer() -> None:
         pytest.skip(f"no exposure feed at {exposure} - run `python tasks.py simulate`")
     duckdb = pytest.importorskip("duckdb")
 
+    items = (RAW / "pos_order_items").as_posix()
+    orders = (RAW / "pos_orders").as_posix()
+    arms = exposure.as_posix()
+
     con = duckdb.connect()
-    leaked = con.execute(
-        f"""
-        select count(*)
-        from read_parquet('{(RAW / "pos_order_items").as_posix()}/**/*.parquet') i
-        join read_parquet('{(RAW / "pos_orders").as_posix()}/**/*.parquet') o
-          using (order_id)
-        join read_parquet('{exposure.as_posix()}/**/*.parquet') e
-          using (customer_id)
-        where i.promo_id = 'PROMO-DEAL11' and e.deal_arm = 'holdout'
-        """
-    ).fetchone()[0]
-    con.close()
+    try:
+        # The burn-in runs the rail for EVERYONE, so a held-out customer having
+        # deal lines before their assignment date is the design working, not a
+        # leak. Bounding on that date is the whole correctness of this check -
+        # without it this test fails on any build whose window is shorter than
+        # the burn-in, which is exactly what CI's 30-day slice is.
+        after = con.execute(
+            f"""
+            select count(*)
+            from read_parquet('{items}/**/*.parquet') i
+            join read_parquet('{orders}/**/*.parquet') o using (order_id)
+            join read_parquet('{arms}/**/*.parquet') e using (customer_id)
+            where cast(o.order_ts as date) >= e.assigned_date
+            """
+        ).fetchone()[0]
+        if after == 0:
+            pytest.skip(
+                "this build ends before the holdout starts - the rail ran for everyone "
+                "throughout, so there is no arm difference to violate yet"
+            )
+
+        leaked = con.execute(
+            f"""
+            select count(*)
+            from read_parquet('{items}/**/*.parquet') i
+            join read_parquet('{orders}/**/*.parquet') o using (order_id)
+            join read_parquet('{arms}/**/*.parquet') e using (customer_id)
+            where i.promo_id = 'PROMO-DEAL11'
+              and e.deal_arm = 'holdout'
+              and cast(o.order_ts as date) >= e.assigned_date
+            """
+        ).fetchone()[0]
+    finally:
+        con.close()
+
     assert leaked == 0, (
-        f"{leaked:,} deal-priced lines reached held-out customers. The control arm is "
-        f"contaminated and no uplift estimate from this build can be trusted."
+        f"{leaked:,} deal-priced lines reached held-out customers after assignment. The "
+        f"control arm is contaminated and no uplift estimate from this build can be trusted."
     )

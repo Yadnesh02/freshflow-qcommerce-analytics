@@ -193,15 +193,14 @@ def t_recommend(args: argparse.Namespace) -> int:
     spells the same sequence out step by step, with a comment saying it would
     collapse into one step once this function worked. It does now.
     """
+    # The deal-* analyses are NOT engines and must not be here. They measure
+    # what the rail did; an engine decides what to do next. Five of them were
+    # inserted into this tuple by a careless registry edit on the D-track and
+    # ran on every `recommend`, which CI caught because they need a warehouse.
     engines = (
         t_expiry_risk,
         t_elasticity,
         t_markdown,
-        t_deal_pnl,
-        t_deal_attach,
-        t_deal_cannibalisation,
-        t_deal_retention,
-        t_deal_uplift,
         t_deal_slots,
         t_transfers,
         t_newsvendor,
