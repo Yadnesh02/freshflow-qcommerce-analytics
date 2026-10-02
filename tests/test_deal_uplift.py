@@ -166,10 +166,28 @@ def test_the_effect_is_there_even_though_no_estimator_finds_it() -> None:
     con = ddb.connect(str(warehouse), read_only=True)
     try:
         panel = build_panel(con)
+        # The burn-in runs the rail for everyone for its first 90 days and CI's
+        # slice is 30, so there the post-assignment window is empty: every
+        # margin_post is zero, every segment's uplift is zero, and the oracle
+        # would "fail" on a build where no customer was ever treated
+        # differently. That is a fact about the fixture, not about the effect.
+        assigned, last = con.execute(
+            """
+            select
+                (select max(assigned_date) from staging.stg_crm__deal_exposure),
+                (select max(date_day) from marts.fct_order_item)
+            """
+        ).fetchone()
     except Exception:
         pytest.skip("this build predates the D1 holdout")
     finally:
         con.close()
+
+    if assigned is None or last is None or last < assigned:
+        pytest.skip(
+            f"build ends {last} but the holdout starts {assigned} - no customer has been "
+            f"treated differently yet, so there is no effect for an oracle to find"
+        )
 
     from simulator.config_loader import load_sim_config
     from simulator.customers import CustomerBase

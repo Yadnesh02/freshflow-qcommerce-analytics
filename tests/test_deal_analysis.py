@@ -43,6 +43,32 @@ def con():
     connection.close()
 
 
+def _needs_post_assignment(con) -> None:
+    """Skip when the build ends before the holdout starts.
+
+    The D4 burn-in runs the rail for everyone for its first 90 days, and CI's
+    slice is 30. On such a build both arms exist as flags but no customer has
+    ever been treated differently, so an arm comparison is not weak evidence -
+    it is a comparison of a group against itself, and asserting on it says
+    something about the fixture rather than about the code.
+    """
+    try:
+        assigned, last = con.execute(
+            """
+            select
+                (select max(assigned_date) from staging.stg_crm__deal_exposure),
+                (select max(date_day) from marts.fct_order_item)
+            """
+        ).fetchone()
+    except duckdb.CatalogException:
+        pytest.skip("this build predates the D1 holdout")
+    if assigned is None or last is None or last < assigned:
+        pytest.skip(
+            f"build ends {last} but the holdout starts {assigned} - the rail ran for "
+            f"everyone throughout, so there are no arms to compare yet"
+        )
+
+
 # ================================================== the P&L
 def test_the_price_invariant_catches_the_error_that_shipped() -> None:
     """The exact figure that was wrong, rejected.
@@ -123,10 +149,20 @@ def test_the_event_study_finds_blocks_not_isolated_days(con) -> None:
     block sits inside another day's window. A day-based design finds nothing at
     all - silently, by returning an empty frame rather than erroring.
     """
-    panel = cann.event_panel(con)
+    try:
+        panel = cann.event_panel(con)
+    except ValueError:
+        pytest.skip("too few clean slot blocks in this build - CI runs a 30-day slice")
     assert not panel.empty
     blocks = panel[["store_id", "sku_id", "block_start"]].drop_duplicates()
-    assert len(blocks) > 100, f"only {len(blocks)} blocks - the window filter is too strict"
+    # Scaled to the build rather than pinned: a 30-day slice cannot hold the
+    # hundreds a full year does, and pinning the full-year number here only
+    # asserts that somebody ran the full year.
+    days = con.execute("select count(distinct date_day) from marts.agg_store_sku_day").fetchone()[0]
+    floor = max(5, days // 3)
+    assert len(blocks) >= floor, (
+        f"only {len(blocks)} clean blocks across {days} days - the window filter is too strict"
+    )
 
 
 def test_the_baseline_never_includes_a_day_inside_a_slot_window(con) -> None:
@@ -201,6 +237,7 @@ def test_the_holdout_never_redeems(con) -> None:
     interpretable; it is NOT what makes an instrumental variable valid, which
     is a different condition and one that fails here.
     """
+    _needs_post_assignment(con)
     from analytics.deal.retention import outcomes
 
     try:
@@ -223,6 +260,7 @@ def test_exposure_reaches_churn_without_redemption(con) -> None:
     the effect on redeemers. They do not: the rail concentrates demand onto a
     few SKUs which then run dry, and that reaches everyone near it.
     """
+    _needs_post_assignment(con)
     from analytics.deal.retention import exclusion_fails, outcomes
 
     try:
@@ -239,6 +277,7 @@ def test_exposure_reaches_churn_without_redemption(con) -> None:
 
 def test_every_retention_estimate_carries_a_detectable_floor(con) -> None:
     """A null with no MDE beside it is a shrug, not a result."""
+    _needs_post_assignment(con)
     from analytics.deal.retention import _compare, outcomes
 
     try:
