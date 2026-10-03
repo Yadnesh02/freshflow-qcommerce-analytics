@@ -49,16 +49,17 @@ select
     note,
     case
         when value is null then '--'
-        when unit = 'inr'    then concat('Rs ', format('{:,.0f}', value))
+        when unit = 'inr' then concat('Rs ', format('{:,.0f}', value))
         -- the sign is spelled out rather than asked of the format spec: DuckDB
         -- rejects '+' and ',' together, and a churn effect without its sign is
         -- the one number on these pages that must never be ambiguous
-        when unit = 'rate'   then concat(
-            case when value >= 0 then '+' else '-' end,
-            format('{:,.2f}', abs(value) * 100), ' pp'
-        )
-        when unit = 'ratio'  then concat(format('{:,.2f}', value), 'x')
-        when unit = 'count'  then format('{:,.2f}', value)
+        when unit = 'rate'
+            then concat(
+                    case when value >= 0 then '+' else '-' end,
+                    format('{:,.2f}', abs(value) * 100), ' pp'
+                )
+        when unit = 'ratio' then concat(format('{:,.2f}', value), 'x')
+        when unit = 'count' then format('{:,.2f}', value)
         -- 4g turned a Qini of 13,095.9 into 1.31e+04, which is unreadable on a
         -- page whose whole job is to make one number legible
         else format('{:,.1f}', value)
