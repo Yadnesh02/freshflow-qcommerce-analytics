@@ -135,7 +135,9 @@ if curve:
         left.metric("Shown to everybody", everyone["display_value"])
         right.metric("Shown to the best-performing slice", best["display_value"])
         st.markdown(
-            f"The rail loses **{everyone['display_value']}** across the whole base and gains "
+            # abs(), because 'loses' already carries the sign and 'loses Rs -152,901'
+            # reads as a double negative
+            f"The rail loses **Rs {abs(everyone['value']):,.0f}** across the whole base and gains "
             f"**{best['display_value']}** on the slice the model ranks highest. "
             f"**That sign change is the argument for targeting it.**"
         )
@@ -163,9 +165,9 @@ value = figures.get("customer_value")
 if value:
     st.caption(
         f"Net figures weigh margin against churn at **{value['display_value']}** per retained "
-        f"customer. {value.get('note') or ''} It cannot be measured inside the window, so it is "
-        f"declared in one line of `analytics/deal/uplift.py` and every net number above is "
-        f"proportional to it."
+        f"customer. It is an assumption, not a measurement - it cannot be read from a window "
+        f"this long - so it is declared in one line of `analytics/deal/uplift.py`, and every "
+        f"net number above is proportional to it."
     )
 
 st.divider()

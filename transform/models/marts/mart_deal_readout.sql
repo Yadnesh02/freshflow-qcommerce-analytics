@@ -49,6 +49,12 @@ select
     note,
     case
         when value is null then '--'
+        -- Two decimals on small amounts, none on large. A total of Rs 352,659
+        -- does not want paise, but a per-customer attach effect of Rs 4.63
+        -- rendered as 'Rs 5' loses the number entirely - and the per-customer
+        -- figures are the ones this page argues from.
+        when unit = 'inr' and abs(value) < 1000
+            then concat('Rs ', format('{:,.2f}', value))
         when unit = 'inr' then concat('Rs ', format('{:,.0f}', value))
         -- the sign is spelled out rather than asked of the format spec: DuckDB
         -- rejects '+' and ',' together, and a churn effect without its sign is
