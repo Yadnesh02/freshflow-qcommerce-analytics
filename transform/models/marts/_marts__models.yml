@@ -487,6 +487,35 @@ models:
         data_tests:
           - not_null
 
+  - name: mart_deal_readout
+    description: >
+      Every published figure for the deal rail's three pages, one row each. Thin
+      by design: the estimators live in analytics/deal/ beside their tests, and a
+      confidence interval re-implemented in SQL would be a second implementation
+      that disagrees with the first the moment either changes. What this model
+      adds is ordering, display formatting in each figure's own unit, and
+      is_significant computed once rather than by three pages each deciding what
+      an interval excluding zero means.
+    columns:
+      - name: metric
+        description: "Stable key. The pages select on this."
+        data_tests:
+          - not_null
+          - unique
+      - name: page
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["does_it_pay", "who_should_see_it", "what_runs_tomorrow"]
+      - name: display_value
+        data_tests:
+          - not_null
+      - name: source
+        description: "The module that produced the figure - provenance for numbers the registry never declared."
+        data_tests:
+          - not_null
+
   - name: mart_experiment_readout
     description: >
       The policy backtest readout - one row per plan §10 metric, with Policy A,

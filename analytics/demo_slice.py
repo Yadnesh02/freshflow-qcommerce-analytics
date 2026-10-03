@@ -351,6 +351,12 @@ def build(warehouse: Path, demo: Path, stores: int, days: int) -> dict:
             f"where store_id in ({store_list}) "
             f"  and received_date <= '{last_day}' and expiry_date >= '{first_day}'"
         ),
+        # --- the deal rail's own findings ---------------------------------
+        # Unwindowed and unfiltered on purpose: these are 23 rows describing the
+        # whole study, not facts about a store-day. Slicing them by window would
+        # leave the deployed pages showing a confidence interval computed over a
+        # period the slice does not contain.
+        "mart_deal_readout": "select * from source.marts.mart_deal_readout",
         # --- data quality -----------------------------------------------
         "dq_source_coverage": (f"select * from source.marts.dq_source_coverage where {window}"),
     }

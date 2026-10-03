@@ -147,6 +147,28 @@ sources:
   # Its path is not FRESHFLOW_RAW_DIR: that variable points at the simulated
   # event feeds, and pointing it here would make the readout disappear whenever
   # anyone rehearsed CI against a scratch dataset.
+  - name: deal
+    description: "The deal rail's findings, computed in analytics/deal/ and served to its three pages."
+    meta:
+      external_location: "read_parquet('{{ env_var('FRESHFLOW_DEAL_DIR', '../data/deal') }}/{name}.parquet')"
+    tables:
+      - name: readout
+        description: >
+          One row per published deal figure, long rather than wide: the P&L, the
+          causal attach estimate, cannibalisation, retention, every estimator's
+          Qini and the targeting curve. Long because a wide table needs a
+          migration each time a chapter adds a figure, and because a number
+          should arrive with its own unit, interval and provenance rather than
+          needing a lookup elsewhere.
+        columns:
+          - name: metric
+            description: "Stable key. The pages select on this."
+          - name: source
+            description: >
+              The module that produced the figure. Not decoration - it is the
+              promise `show_query` makes for registry tiles, kept for figures
+              that do not come from the registry.
+
   - name: experiment
     description: "Policy A/B backtest results, committed so the mart rebuilds on any clone."
     meta:

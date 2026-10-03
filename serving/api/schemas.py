@@ -306,3 +306,40 @@ class WarehouseRowsResponse(BaseModel):
 
     data: list[dict[str, Any]]
     meta: ResponseMeta
+
+
+# -------------------------------------------------------------------- deal
+# The deal rail's three pages read these and nothing else. `metric_definition`
+# is absent for the same reason the Warehouse page's responses carry a null
+# one: these figures were produced by `analytics/deal/`, not compiled from the
+# registry, and a response that claimed otherwise would be the first thing in
+# this API to lie about where a number came from.
+
+
+class DealFigure(BaseModel):
+    """One published deal figure, with its interval and the module that made it."""
+
+    page: str = Field(description="`does_it_pay`, `who_should_see_it` or `what_runs_tomorrow`.")
+    metric: str
+    label: str
+    value: float | None = None
+    ci_low: float | None = None
+    ci_high: float | None = None
+    unit: str
+    is_significant: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the interval excludes zero. Null means the figure carries no "
+            "interval at all, which is NOT the same as 'not significant'."
+        ),
+    )
+    display_value: str = Field(description="Formatted in the figure's own unit by the mart.")
+    source: str = Field(description="The module that produced it.")
+    note: str | None = None
+
+
+class DealReadoutResponse(BaseModel):
+    """Every figure the deal pages show, ordered page by page."""
+
+    data: list[DealFigure]
+    meta: ResponseMeta

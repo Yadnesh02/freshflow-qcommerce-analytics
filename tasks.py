@@ -197,6 +197,11 @@ def t_recommend(args: argparse.Namespace) -> int:
     # what the rail did; an engine decides what to do next. Five of them were
     # inserted into this tuple by a careless registry edit on the D-track and
     # ran on every `recommend`, which CI caught because they need a warehouse.
+    #
+    # It happened a SECOND time in D6, the same way: a patch adding a task to
+    # the registry matched `t_deal_slots,` and this tuple is where that string
+    # occurs first. If you are adding a deal task, the registry is the dict near
+    # the bottom of this file - not here.
     engines = (
         t_expiry_risk,
         t_elasticity,
@@ -375,6 +380,11 @@ def t_deal_uplift(_: argparse.Namespace) -> int:
     return py("-m", "analytics.deal.uplift")
 
 
+def t_deal_readout(_: argparse.Namespace) -> int:
+    """Compute every published deal figure once, for the three D6 pages."""
+    return py("-m", "analytics.deal.readout")
+
+
 def t_deal_slots(args: argparse.Namespace) -> int:
     """Allocate the Rs 11 deal slots per store-day with the constraint program."""
     return py(
@@ -523,6 +533,7 @@ TARGETS = {
     "deal-cannibalisation": t_deal_cannibalisation,
     "deal-retention": t_deal_retention,
     "deal-uplift": t_deal_uplift,
+    "deal-readout": t_deal_readout,
     "deal-slots": t_deal_slots,
     "transfers": t_transfers,
     "newsvendor": t_newsvendor,

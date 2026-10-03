@@ -158,7 +158,7 @@ did not.
 | **D3** | Retention readout against D1's holdout | ✅ Retention measured with a CI and an MDE beside it; the mechanism behind the sign is identified rather than asserted | 1d |
 | **D4** | Uplift model, Qini, targeting policy | ✅ Reported: **no estimator beats random**, with an oracle ceiling proving the effect is there to find | 2d |
 | **D5** | Allocator re-pointed at measured coefficients | ✅ Each coefficient re-derived from the warehouse by a test; cannibalisation shown to be already inside the causal basket margin rather than missing from it | 0.5d |
-| **D6** | Three-page dashboard, README, the 60-second story | Each page answers its question above the fold | 1.5d |
+| **D6** | Three-page dashboard, README, the 60-second story | ✅ Three pages lead the app, each answering its question above the fold, all served from `mart_deal_readout` through the API | 1.5d |
 
 > **A correction to this gate, made while building it.** It originally read "across RFM features".
 > That was wrong: recency and frequency are exactly what the rail is supposed to move, so requiring

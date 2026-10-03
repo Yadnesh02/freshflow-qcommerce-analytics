@@ -240,3 +240,13 @@ class MetricsClient:
                 "order_dir": order_dir if order_by else None,
             },
         )
+
+    def deal_readout(self, page: str | None = None) -> ApiResult:
+        """Every published figure for the deal rail, optionally one page's worth.
+
+        The three D6 pages render this and compute nothing. Each row arrives
+        with its own unit, interval and the module that produced it, so a figure
+        the page does not recognise still displays correctly and still says
+        where it came from.
+        """
+        return self._get("/deal/readout", {"page": page})

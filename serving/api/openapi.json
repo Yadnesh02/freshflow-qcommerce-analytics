@@ -21,6 +21,125 @@
         "title": "ActionQueueResponse",
         "type": "object"
       },
+      "DealFigure": {
+        "description": "One published deal figure, with its interval and the module that made it.",
+        "properties": {
+          "ci_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci High"
+          },
+          "ci_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Low"
+          },
+          "display_value": {
+            "description": "Formatted in the figure's own unit by the mart.",
+            "title": "Display Value",
+            "type": "string"
+          },
+          "is_significant": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the interval excludes zero. Null means the figure carries no interval at all, which is NOT the same as 'not significant'.",
+            "title": "Is Significant"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "page": {
+            "description": "`does_it_pay`, `who_should_see_it` or `what_runs_tomorrow`.",
+            "title": "Page",
+            "type": "string"
+          },
+          "source": {
+            "description": "The module that produced it.",
+            "title": "Source",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "page",
+          "metric",
+          "label",
+          "unit",
+          "display_value",
+          "source"
+        ],
+        "title": "DealFigure",
+        "type": "object"
+      },
+      "DealReadoutResponse": {
+        "description": "Every figure the deal pages show, ordered page by page.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DealFigure"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "DealReadoutResponse",
+        "type": "object"
+      },
       "DefectRecord": {
         "description": "One deliberately injected defect, and what staging does about it.\n\nServed next to the scan because a warning without its cause reads as an\nunexplained amber light. The clickstream outage warns on every healthy\nbuild; the ledger is what turns that from a nag into a known quantity.",
         "properties": {
@@ -1242,6 +1361,55 @@
           }
         },
         "summary": "Everything to do today"
+      }
+    },
+    "/deal/readout": {
+      "get": {
+        "description": "Served from a mart, because the pages cannot compute and nor can this.\n\n`serving/web/` may not import a database driver - gate G3 - so a page gets\nits numbers here or not at all. And these numbers are not cheap: the uplift\nchapter fits four estimators and a causal tree, which is seconds of CPU per\ncall. So `analytics/deal/readout.py` computes them once, writes parquet, and\n`mart_deal_readout` gives that ordering and display formatting. This endpoint\nonly reads rows.",
+        "operationId": "deal_readout_deal_readout_get",
+        "parameters": [
+          {
+            "description": "Filter to one page's figures",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one page's figures",
+              "title": "Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DealReadoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Every published figure for the deal rail's three pages"
       }
     },
     "/elasticity": {

@@ -77,3 +77,16 @@ reports/
 # artifacts: megabytes each, and git history only grows.
 !data/experiment/
 !data/experiment/readout.parquet
+
+# The deal readout, for the same reason and with the same placement rule (D6).
+#
+# `mart_deal_readout` is the only source the three deal pages have, and its
+# parquet is produced by `analytics/deal/readout.py` against a built warehouse.
+# CI never runs that step - it builds a 30-day slice and goes straight to dbt -
+# so without this exception the mart has no source and the dbt build fails on a
+# missing file rather than on anything being wrong.
+#
+# 23 rows, a few KB. The committed copy currently describes the 225-day
+# validation build; `warehouse.yml` replaces it with the full year.
+!data/deal/
+!data/deal/readout.parquet

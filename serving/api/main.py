@@ -54,6 +54,8 @@ from semantic.resolver import (
 from serving.api.cache import TTLCache
 from serving.api.schemas import (
     ActionQueueResponse,
+    DealFigure,
+    DealReadoutResponse,
     DefectRecord,
     ElasticityCell,
     ElasticityResponse,
@@ -988,6 +990,49 @@ def warehouse_rows(
         meta=ResponseMeta(
             sql=sql,
             params=[],
+            rows=len(rows),
+            cached=cached,
+            generated_at=_now(),
+            elapsed_ms=round(elapsed, 2),
+            warnings=[],
+        ),
+    )
+
+
+@app.get(
+    "/deal/readout",
+    response_model=DealReadoutResponse,
+    summary="Every published figure for the deal rail's three pages",
+)
+def deal_readout(
+    page: str | None = Query(default=None, description="Filter to one page's figures"),
+) -> DealReadoutResponse:
+    """Served from a mart, because the pages cannot compute and nor can this.
+
+    `serving/web/` may not import a database driver - gate G3 - so a page gets
+    its numbers here or not at all. And these numbers are not cheap: the uplift
+    chapter fits four estimators and a causal tree, which is seconds of CPU per
+    call. So `analytics/deal/readout.py` computes them once, writes parquet, and
+    `mart_deal_readout` gives that ordering and display formatting. This endpoint
+    only reads rows.
+    """
+    sql = "select * from marts.mart_deal_readout"
+    params: list[Any] = []
+    if page:
+        sql += " where page = ?"
+        params.append(page)
+    sql += " order by page_order, metric"
+
+    rows, cached, elapsed = _serve(
+        sql,
+        params,
+        missing_hint="run `python tasks.py deal-readout` then rebuild, so the mart exists",
+    )
+    return DealReadoutResponse(
+        data=[DealFigure(**{k: v for k, v in row.items() if k != "page_order"}) for row in rows],
+        meta=ResponseMeta(
+            sql=sql,
+            params=params,
             rows=len(rows),
             cached=cached,
             generated_at=_now(),

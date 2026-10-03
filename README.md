@@ -82,7 +82,7 @@ unanswered question in it turned out to be.
 | **D3** | Retention readout against D1's holdout | ✅ done — the rail **costs** retention: +1.06pp churn [+0.38, +1.73], via stockouts |
 | **D4** | Uplift model, Qini curve, targeting policy | ✅ done — an **honest causal tree beats random** (Qini +13,096); four other estimators do not. Shown to everyone the rail loses ₹152,901; shown to the top 20% it gains ₹60,711 |
 | **D5** | Deal-slot allocator re-pointed at measured coefficients | ✅ done — basket margin becomes a swept parameter (causal ₹306.48, CI [4.33, 608.63]); cannibalisation shown to be **already inside** it, not missing |
-| **D6** | Three-page dashboard, rewritten story | ⬜ not started |
+| **D6** | Three-page dashboard, rewritten story | ✅ done — the three deal pages lead, the seven platform pages follow; all served from `mart_deal_readout` through the API |
 
 The platform's own build history, its 47 tasks and its five acceptance gates are in
 [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
@@ -131,16 +131,25 @@ irreproducible.
 
 ### ▶ The app
 
-**FreshFlow Control Tower** — seven pages, reading only from the metrics API. Every tile has a
-**see query** control that shows the exact SQL that produced its number and the registry definition
-that compiled it.
+**FreshFlow Control Tower** — three pages on the deal question, seven more of platform underneath,
+reading only from the metrics API. Every tile has a **see query** control that shows the exact SQL
+that produced its number and the registry definition that compiled it.
 
 **▶ [Open the live app](https://freshflow-qcommerce-analytics-b2ozx2naawfh7gxubum6gm.streamlit.app/)** — or run it locally with `python tasks.py app`. Expect a
 ~40 second first load: Streamlit Community Cloud sleeps the app after inactivity, and the container
 fetches its warehouse slice from a GitHub Release on wake.
 
-The three pages that answer the deal question land at **D6**. Until then these seven are the
-platform's own views.
+| The deal question | What it decides |
+|---|---|
+| **Does the rail pay?** | Keep the rail, narrow it, or stop it. The naive comparison sits beside the causal one and the gap between them is the page — one is per deal order and contains attach only, the other is per assigned customer and contains incidence as well. |
+| **Who should see it?** | Four estimators lose to random targeting and a causal tree beats it. The failures are shown rather than dropped: they are what makes the one that works worth believing. |
+| **What runs tomorrow?** | The only page here somebody acts on — which SKUs take tomorrow's slots, and which constraint bound to put each one there. |
+
+Every figure on those three carries the module that produced it, because they do **not** come from
+`semantic/metrics.yml` and a page that implied otherwise would be the first thing in this app to
+lie about where a number came from.
+
+The seven below are the platform's own views.
 
 | Page | The decision it supports |
 |---|---|
