@@ -248,12 +248,23 @@ def test_both_arms_are_declared_and_configured(cfg) -> None:
 @pytest.mark.skipif(
     os.environ.get("FRESHFLOW_SKIP_SLOW") == "1", reason="requires a short simulation"
 )
-def test_a_simulated_day_produces_actions(cfg) -> None:
-    """S4.6's gate, run for real rather than asserted about."""
+def test_a_simulated_day_produces_actions(cfg, tmp_path) -> None:
+    """S4.6's gate, run for real rather than asserted about.
+
+    `out_dir` is explicit, and that is not tidiness. Without it the run writes
+    its reference feeds into the project's own `data/raw`. That was invisible
+    while those feeds were ref_stores and ref_suppliers - identical content,
+    overwritten in place - but D1 added crm_deal_exposure to the same function,
+    so a test run started dropping a 90-day-burn-in exposure feed on top of a
+    pre-D1 dataset. The result was a data/raw that disagreed with itself and a
+    holdout invariant failing on 3,290 lines that were never contaminated.
+    """
     from simulator.policies.preview import action_list, context_after
     from simulator.run import SimulationRun, build_policy
 
-    run = SimulationRun(cfg, seed=42, days=10, policy_name="optimized", quiet=True)
+    run = SimulationRun(
+        cfg, seed=42, days=10, policy_name="optimized", quiet=True, out_dir=tmp_path
+    )
     run.run()
     day = run.summary[-1]["date"] + dt.timedelta(days=1)
     ctx = context_after(run, day)

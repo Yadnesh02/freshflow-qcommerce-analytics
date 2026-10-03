@@ -113,19 +113,61 @@ DEAL_PRICE = 11.0
 # the 45 SKUs with both. See the module docstring for why median over mean.
 DEAL_UPLIFT_MULTIPLIER = 3.57
 
-# Rest-of-basket margin on orders that took the deal minus orders that did not,
-# within the same store-day. An upper bound - deal-takers self-select.
-INCREMENTAL_BASKET_MARGIN = 6.27
+# RE-POINTED IN D5, and demoted from a constant to a parameter in the same move.
+#
+# This was 6.27: rest-of-basket margin on orders that took the deal minus orders
+# that did not, within the same store-day. D2 showed that comparison is not
+# causal - deal-takers self-select - and replaced it with an intent-to-treat
+# estimate against D1's randomised holdout, which gives **Rs 306.48 per deal
+# unit, 95% CI [4.33, 608.63]**.
+#
+# That interval spans two orders of magnitude, so the point estimate does not
+# belong in an objective function. At 306 the basket term dwarfs clearance and
+# subsidy together and the allocator stops choosing on anything else - it would
+# simply rank by uptake, on a number whose lower bound is 4.33.
+#
+# So this follows `reactivation_value`: the default is the conservative end of
+# the measured interval, the central estimate is documented rather than used,
+# and `--basket-margin` sweeps it. Worth noting that the old 6.27 sits INSIDE
+# the causal interval, just above its floor - it was never refuted, only
+# under-identified, and the honest correction is the width rather than the level.
+CAUSAL_BASKET_MARGIN = 306.48
+CAUSAL_BASKET_MARGIN_CI = (4.33, 608.63)
+DEFAULT_BASKET_MARGIN = CAUSAL_BASKET_MARGIN_CI[0]
+
+# Units of normal-price demand lost around a slot for every unit the slot lifts,
+# from D2's event study on the days either side of a block. 0.1154 on the post-D1
+# build, 0.029 on the pre-D1 warehouse - it moves with the dataset, which is why
+# the test re-derives it rather than trusting this line.
+#
+# **REPORTED, NOT CHARGED, and that is the whole point of the term.** The first
+# cut of D5 added it to `slot_value` as a cost the objective was missing. It is
+# not missing: the causal basket margin above comes from an intent-to-treat
+# comparison of the exposed arm against the holdout, and any normal-price sale
+# the rail destroyed among exposed customers is already inside that difference.
+# Adding this on top charges the same loss twice.
+#
+# It WOULD have been a genuine addition under the old 6.27, which compared
+# orders within a store-day and never saw the days around them. So the honest
+# statement is that switching to a causal basket margin SUBSUMES cannibalisation
+# rather than leaving it out - and the term survives here because an allocator
+# that cannot show how much drag sits inside its own basket figure is asking to
+# be trusted.
+CANNIBALISATION_RATE = 0.1154
 
 # Incremental probability that a deal order is a customer returning after a
 # 30-day gap: 5.31% against 2.48% on the same store-days.
 REACTIVATION_RATE = 0.0283
 
-# AN ASSUMPTION, NOT A MEASUREMENT, and the term the answer turns on. What a
-# reactivated customer is worth cannot be read from this event stream: it needs
-# a counterfactual about whether they would otherwise have been lost. Zero is
-# the value the data supports; the report prints the breakeven and S5.3 sweeps
-# it alongside the Rs 42 delivery cost and the markdown disposal cost.
+# STILL ZERO, and D3 turned that from caution into evidence. The rail does have
+# a counterfactual now - D1's holdout - and measured against it the exposed arm
+# churns MORE, not less: +0.73pp on the 225-day build against a minimum
+# detectable effect of 1.49pp, so the retention effect is not distinguishable
+# from zero and its sign is, if anything, wrong. The mechanism is availability -
+# exposed customers carry +0.21 stockout-affected days, which replicates
+# strongly - so a positive reactivation value is not merely unsupported, it
+# points the wrong way. The report still prints the breakeven; S5.3 still sweeps
+# it. Nothing here may set it positive.
 DEFAULT_REACTIVATION_VALUE = 0.0
 
 # The plan's five constraints.
@@ -224,7 +266,11 @@ def load_candidates(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.execute(CANDIDATE_SQL).df()
 
 
-def score(candidates: pd.DataFrame, reactivation_value: float) -> pd.DataFrame:
+def score(
+    candidates: pd.DataFrame,
+    reactivation_value: float,
+    basket_margin: float = DEFAULT_BASKET_MARGIN,
+) -> pd.DataFrame:
     """The four objective terms, per candidate, in rupees.
 
     Uptake is capped by stock: a slot cannot sell units the store does not hold,
@@ -240,8 +286,16 @@ def score(candidates: pd.DataFrame, reactivation_value: float) -> pd.DataFrame:
     cleared = scored[["expected_units", "units_at_risk"]].min(axis=1)
     scored["clearance_value"] = cleared * scored["unit_landed_cost"]
 
-    scored["basket_value"] = scored["expected_units"] * INCREMENTAL_BASKET_MARGIN
+    scored["basket_value"] = scored["expected_units"] * basket_margin
     scored["reactivation_value"] = scored["expected_units"] * REACTIVATION_RATE * reactivation_value
+
+    # Diagnostic only - deliberately absent from slot_value below. Valued at the
+    # margin those units would have earned rather than at their price, because
+    # the cost of a cannibalised unit is the contribution forgone.
+    cannibalised = scored["expected_units"] * CANNIBALISATION_RATE
+    scored["cannibalisation_drag"] = -(
+        cannibalised * (scored["base_price"] - scored["unit_landed_cost"])
+    )
 
     # what the slot earns on the item, minus what those units would have earned
     # anyway. Charging (base - 11) x uptake instead would bill the discount to
@@ -251,6 +305,8 @@ def score(candidates: pd.DataFrame, reactivation_value: float) -> pd.DataFrame:
     scored["item_margin_delta"] = on_deal - without
     scored["subsidy"] = -scored["item_margin_delta"]
 
+    # cannibalisation_drag is NOT summed here. See its definition: the causal
+    # basket margin already nets it, and adding it would charge it twice.
     scored["slot_value"] = (
         scored["clearance_value"]
         + scored["basket_value"]
@@ -476,6 +532,18 @@ def main() -> int:
             "carries no counterfactual, so the default is zero; S5.3 sweeps it"
         ),
     )
+    parser.add_argument(
+        "--basket-margin",
+        type=float,
+        default=DEFAULT_BASKET_MARGIN,
+        help=(
+            f"Incremental non-deal margin per deal unit. D2 measures this causally at "
+            f"Rs {CAUSAL_BASKET_MARGIN:.2f} with a 95%% CI of "
+            f"[{CAUSAL_BASKET_MARGIN_CI[0]:.2f}, {CAUSAL_BASKET_MARGIN_CI[1]:.2f}]; the default "
+            f"is the conservative end of that interval, because the point estimate would "
+            f"dominate every other term in the objective"
+        ),
+    )
     args = parser.parse_args()
 
     warehouse = Path(args.warehouse)
@@ -490,7 +558,7 @@ def main() -> int:
         if candidates.empty:
             print("\n  no candidate passes the on-hand and shelf-life screens")
             return 1
-        scored = score(candidates, args.reactivation_value)
+        scored = score(candidates, args.reactivation_value, args.basket_margin)
         allocated = allocate(scored, args.slots, args.pl_floor)
         write(con, allocated)
         return report(allocated, scored, args.slots, args.pl_floor)

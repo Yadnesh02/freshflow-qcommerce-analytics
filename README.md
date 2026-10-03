@@ -81,7 +81,7 @@ unanswered question in it turned out to be.
 | **D2** | Causal attach estimate + cannibalisation event study | ✅ done — 4.66× return [0.30×, 9.02×]; P&L corrected to −₹436,771 |
 | **D3** | Retention readout against D1's holdout | ✅ done — the rail **costs** retention: +1.06pp churn [+0.38, +1.73], via stockouts |
 | **D4** | Uplift model, Qini curve, targeting policy | ✅ done — an **honest causal tree beats random** (Qini +13,096); four other estimators do not. Shown to everyone the rail loses ₹152,901; shown to the top 20% it gains ₹60,711 |
-| **D5** | Deal-slot allocator re-pointed at measured coefficients | ⬜ not started |
+| **D5** | Deal-slot allocator re-pointed at measured coefficients | ✅ done — basket margin becomes a swept parameter (causal ₹306.48, CI [4.33, 608.63]); cannibalisation shown to be **already inside** it, not missing |
 | **D6** | Three-page dashboard, rewritten story | ⬜ not started |
 
 The platform's own build history, its 47 tasks and its five acceptance gates are in

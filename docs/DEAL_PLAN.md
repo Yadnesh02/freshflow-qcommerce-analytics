@@ -157,7 +157,7 @@ did not.
 | **D2** | Causal attach + cannibalisation event study | ✅ Attach reported with a CI against the naive figure; P&L reconciliation resolved. **Full-year numbers need a post-D1 warehouse rebuild** | 1.5d |
 | **D3** | Retention readout against D1's holdout | ✅ Retention measured with a CI and an MDE beside it; the mechanism behind the sign is identified rather than asserted | 1d |
 | **D4** | Uplift model, Qini, targeting policy | ✅ Reported: **no estimator beats random**, with an oracle ceiling proving the effect is there to find | 2d |
-| **D5** | Allocator re-pointed at measured coefficients | The deal P&L reconciles end to end: subsidy + cannibalisation against attach + retention, with no unexplained residual | 0.5d |
+| **D5** | Allocator re-pointed at measured coefficients | ✅ Each coefficient re-derived from the warehouse by a test; cannibalisation shown to be already inside the causal basket margin rather than missing from it | 0.5d |
 | **D6** | Three-page dashboard, README, the 60-second story | Each page answers its question above the fold | 1.5d |
 
 > **A correction to this gate, made while building it.** It originally read "across RFM features".
@@ -374,6 +374,37 @@ The direction is unchanged and the **mechanism replicates strongly** — exposed
 materially more stockout-affected days on both builds. What does not survive is the claim that the
 churn effect itself is distinguishable from zero. D3 should be read as *the rail costs availability,
 and availability plausibly costs retention*, not as a measured retention effect.
+
+### What D5 changed, and the double-count it avoided
+
+| coefficient | was | now |
+|---|---|---|
+| Incremental basket margin | `6.27`, a constant | **parameter**, default ₹4.33 — the conservative end of the causal CI |
+| Causal basket margin | — | ₹306.48, CI **[4.33, 608.63]**, documented not used |
+| Cannibalisation rate | absent | 0.1154, **reported as a diagnostic, not charged** |
+| Reactivation value | `0.0`, cautious | `0.0`, **evidenced** — D3 found the sign points the other way |
+
+**The point estimate does not belong in an objective function.** At ₹306 the basket term dwarfs
+clearance and subsidy together, so the allocator stops choosing on anything else and simply ranks by
+uptake — on a number whose lower bound is two orders of magnitude smaller. It follows
+`reactivation_value`: conservative default, central estimate documented, `--basket-margin` sweeps it.
+Worth recording that the old ₹6.27 sits *inside* the causal interval, just above its floor. It was
+never refuted, only under-identified; the honest correction is the width, not the level.
+
+> **A double-count caught before it shipped.** The first cut of D5 added cannibalisation to
+> `slot_value` as a cost the objective was missing. It is not missing. The causal basket margin comes
+> from an intent-to-treat comparison of the exposed arm against the holdout, so every normal-price
+> sale the rail destroyed among exposed customers is *already inside that difference* — the identity
+> `margin = nondeal_margin + deal_margin` holds exactly on the data. Charging it again bills the same
+> loss twice. It **would** have been a genuine addition under the old ₹6.27, which compared orders
+> within a store-day and never saw the days around them. So switching to a causal basket margin
+> **subsumes** cannibalisation rather than leaving it out, and a test pins `slot_value` to the four
+> terms that belong in it.
+
+`tests/test_deal_coefficients.py` re-derives each coefficient from the warehouse and asserts
+membership of the measured interval rather than equality to a point estimate — demanding a paisa
+match would fail on every rebuild and teach everyone to ignore it. This exists because D2 began with
+a number that lived in a docstring and was wrong for a sprint and a half.
 
 ### One hard dependency
 
